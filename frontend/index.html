@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#070b18" />
+  <meta name="description" content="GAURAV AI — Your personal AI assistant." />
+
+  <title>GAURAV AI — Personal AI Assistant</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+    rel="stylesheet"
+  >
+
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+
+  <div class="bg-orb orb-1"></div>
+  <div class="bg-orb orb-2"></div>
+
+  <main class="app-shell">
+
+    <!-- ================= SIDEBAR ================= -->
+
+    <aside class="sidebar" id="sidebar">
+
+      <div class="brand">
+        <div class="brand-orb">✦</div>
+
+        <div>
+          <strong>GAURAV AI</strong>
+          <span>Personal AI Assistant</span>
+        </div>
+      </div>
+
+      <button class="new-chat" id="newChatBtn">
+        ＋ New conversation
+      </button>
+
+      <nav>
+
+        <button class="nav-item active" data-view="chat">
+          ◉
+          <span>Gaurav AI</span>
+        </button>
+
+        <button class="nav-item" data-view="notes">
+          ▤
+          <span>Notes</span>
+          <b id="noteCount">0</b>
+        </button>
+
+        <button class="nav-item" data-view="tasks">
+          ✓
+          <span>Tasks</span>
+          <b id="taskCount">0</b>
+        </button>
+
+        <button class="nav-item" data-view="calculator">
+          ⌁
+          <span>Calculator</span>
+        </button>
+
+      </nav>
+
+      <div class="sidebar-bottom">
+
+        <button class="nav-item" id="themeBtn">
+          ☾
+          <span>Toggle theme</span>
+        </button>
+
+        <button class="nav-item" id="clearDataBtn">
+          ⌫
+          <span>Clear local data</span>
+        </button>
+
+      </div>
+
+    </aside>
+
+
+    <!-- ================= MAIN PANEL ================= -->
+
+    <section class="main-panel">
+
+      <!-- TOP BAR -->
+
+      <header class="topbar">
+
+        <button
+          class="mobile-menu"
+          id="mobileMenu"
+          aria-label="Open menu"
+        >
+          ☰
+        </button>
+
+        <div>
+
+          <div class="eyebrow">
+            GAURAV AI •
+            <span id="statusText">ONLINE</span>
+          </div>
+
+          <h1 id="pageTitle">
+            Gaurav AI Assistant
+          </h1>
+
+        </div>
+
+        <div
+          class="clock"
+          id="clock"
+        >
+          --:--
+        </div>
+
+      </header>
+
+
+      <!-- ================= CONTENT ================= -->
+
+      <section class="content" id="content">
+
+        <!-- ================= CHAT VIEW ================= -->
+
+        <div
+          class="view chat-view"
+          id="chatView"
+        >
+
+          <div class="hero">
+
+            <div
+              class="ai-orb"
+              id="aiOrb"
+              aria-label="Gaurav AI"
+            >
+              <div class="orb-core">
+                ✦
+              </div>
+            </div>
+
+            <p class="hello">
+              Hello Gaurav 👋
+            </p>
+
+            <h2>
+              I'm Gaurav AI
+            </h2>
+
+            <p class="muted">
+              Your personal AI assistant. Ask me anything.
+            </p>
+
+          </div>
+
+
+          <!-- QUICK ACTIONS -->
+
+          <div class="quick-grid">
+
+            <button
+              class="quick-card"
+              data-command="What can you do?"
+            >
+              💡
+              <span>What can you do?</span>
+              <small>Explore Gaurav AI</small>
+            </button>
+
+
+            <button
+              class="quick-card"
+              data-command="calculator 125*8"
+            >
+              🧮
+              <span>Calculate</span>
+              <small>125 × 8</small>
+            </button>
+
+
+            <button
+              class="quick-card"
+              data-command="note Remember to finish my project"
+            >
+              📝
+              <span>Make a note</span>
+              <small>Save something quickly</small>
+            </button>
+
+
+            <button
+              class="quick-card"
+              data-command="add task Complete AI website"
+            >
+              ✅
+              <span>Add a task</span>
+              <small>Stay on track</small>
+            </button>
+
+          </div>
+
+
+          <!-- CHAT MESSAGES -->
+
+          <div
+            class="messages"
+            id="messages"
+            aria-live="polite"
+          ></div>
+
+        </div>
+
+
+        <!-- ================= NOTES ================= -->
+
+        <div
+          class="view hidden"
+          id="notesView"
+        >
+
+          <div class="section-head">
+
+            <div>
+              <span class="eyebrow">
+                GAURAV AI • MEMORY
+              </span>
+
+              <h2>
+                Your Notes
+              </h2>
+            </div>
+
+            <button
+              class="primary-btn"
+              id="addNoteBtn"
+            >
+              ＋ Add note
+            </button>
+
+          </div>
+
+
+          <div
+            class="note-form hidden"
+            id="noteForm"
+          >
+
+            <input
+              id="noteInput"
+              placeholder="Write a note..."
+              maxlength="300"
+            >
+
+            <button
+              class="primary-btn"
+              id="saveNoteBtn"
+            >
+              Save
+            </button>
+
+          </div>
+
+
+          <div
+            class="cards-list"
+            id="notesList"
+          ></div>
+
+        </div>
+
+
+        <!-- ================= TASKS ================= -->
+
+        <div
+          class="view hidden"
+          id="tasksView"
+        >
+
+          <div class="section-head">
+
+            <div>
+              <span class="eyebrow">
+                GAURAV AI • PRODUCTIVITY
+              </span>
+
+              <h2>
+                Your Tasks
+              </h2>
+            </div>
+
+            <button
+              class="primary-btn"
+              id="addTaskBtn"
+            >
+              ＋ Add task
+            </button>
+
+          </div>
+
+
+          <div
+            class="task-form hidden"
+            id="taskForm"
+          >
+
+            <input
+              id="taskInput"
+              placeholder="What needs to be done?"
+              maxlength="160"
+            >
+
+            <button
+              class="primary-btn"
+              id="saveTaskBtn"
+            >
+              Add
+            </button>
+
+          </div>
+
+
+          <div
+            class="cards-list"
+            id="tasksList"
+          ></div>
+
+        </div>
+
+
+        <!-- ================= CALCULATOR ================= -->
+
+        <div
+          class="view hidden"
+          id="calculatorView"
+        >
+
+          <div class="section-head">
+
+            <div>
+              <span class="eyebrow">
+                GAURAV AI • UTILITY
+              </span>
+
+              <h2>
+                Calculator
+              </h2>
+            </div>
+
+          </div>
+
+
+          <div class="calculator">
+
+            <input
+              id="calcDisplay"
+              inputmode="decimal"
+              placeholder="0"
+              aria-label="Calculator display"
+            >
+
+
+            <div
+              class="calc-grid"
+              id="calcGrid"
+            >
+
+              <button
+                data-value="C"
+                class="danger"
+              >
+                C
+              </button>
+
+              <button data-value="⌫">
+                ⌫
+              </button>
+
+              <button data-value="%">
+                %
+              </button>
+
+              <button
+                data-value="/"
+                class="operator"
+              >
+                ÷
+              </button>
+
+
+              <button data-value="7">
+                7
+              </button>
+
+              <button data-value="8">
+                8
+              </button>
+
+              <button data-value="9">
+                9
+              </button>
+
+              <button
+                data-value="*"
+                class="operator"
+              >
+                ×
+              </button>
+
+
+              <button data-value="4">
+                4
+              </button>
+
+              <button data-value="5">
+                5
+              </button>
+
+              <button data-value="6">
+                6
+              </button>
+
+              <button
+                data-value="-"
+                class="operator"
+              >
+                −
+              </button>
+
+
+              <button data-value="1">
+                1
+              </button>
+
+              <button data-value="2">
+                2
+              </button>
+
+              <button data-value="3">
+                3
+              </button>
+
+              <button
+                data-value="+"
+                class="operator"
+              >
+                +
+              </button>
+
+
+              <button
+                data-value="0"
+                class="wide"
+              >
+                0
+              </button>
+
+              <button data-value=".">
+                .
+              </button>
+
+              <button
+                data-value="="
+                class="equals"
+              >
+                =
+              </button>
+
+            </div>
+
+          </div>
+
+        </div>
+
+      </section>
+
+
+      <!-- ================= CHAT COMPOSER ================= -->
+
+      <form
+        class="composer"
+        id="composer"
+      >
+
+        <button
+          type="button"
+          class="icon-btn"
+          id="voiceBtn"
+          title="Talk to Gaurav AI"
+          aria-label="Voice input"
+        >
+          🎙️
+        </button>
+
+
+        <input
+          id="userInput"
+          autocomplete="off"
+          placeholder="Ask Gaurav AI anything..."
+          aria-label="Message Gaurav AI"
+        >
+
+
+        <button
+          type="submit"
+          class="send-btn"
+          title="Send message"
+          aria-label="Send message"
+        >
+          ➤
+        </button>
+
+      </form>
+
+
+      <p class="tip">
+        Tip: try
+        <b>note</b>,
+        <b>add task</b>,
+        <b>calculator</b>,
+        or just chat with
+        <b>Gaurav AI</b>.
+      </p>
+
+    </section>
+
+  </main>
+
+
+  <div
+    class="toast"
+    id="toast"
+  ></div>
+
+
+  <script src="script.js"></script>
+
+</body>
+</html>
