@@ -1,1603 +1,1492 @@
-/* =========================================================
-   GAURAV AI — PERSONAL ASSISTANT
-   Complete Frontend Controller
-========================================================= */
+:root {
+  --bg: #070a14;
+  --bg-soft: #0c1120;
 
-const $ = (id) => document.getElementById(id);
+  --panel: rgba(15, 21, 40, 0.82);
+  --panel-strong: rgba(20, 27, 50, 0.95);
 
-/* =========================================================
-   ELEMENTS
-========================================================= */
+  --text: #f7f8ff;
+  --muted: #98a3c2;
 
-const messagesEl = $('messages');
-const composer = $('composer');
-const userInput = $('userInput');
-const statusText = $('statusText');
-const aiOrb = $('aiOrb');
+  --line: rgba(255, 255, 255, 0.09);
 
-/* =========================================================
-   STORAGE KEYS
-========================================================= */
+  --accent: #7657ff;
+  --accent-2: #00d9ff;
 
-const STORAGE = {
-  chat: 'gaurav_chat_history',
-  notes: 'gaurav_notes',
-  tasks: 'gaurav_tasks',
-  theme: 'gaurav_theme'
-};
+  --success: #55e6ad;
+  --danger: #ff5577;
 
-/* =========================================================
-   STATE
-========================================================= */
+  --shadow: 0 20px 70px rgba(0, 0, 0, 0.35);
 
-let chatHistory = loadJSON(STORAGE.chat, []);
-let notes = loadJSON(STORAGE.notes, []);
-let tasks = loadJSON(STORAGE.tasks, []);
-
-let isThinking = false;
-
-/* =========================================================
-   STORAGE HELPERS
-========================================================= */
-
-function loadJSON(key, fallback) {
-  try {
-    const value = localStorage.getItem(key);
-
-    if (!value) {
-      return fallback;
-    }
-
-    const parsed = JSON.parse(value);
-
-    return parsed;
-  } catch (error) {
-    console.error('Storage load error:', error);
-    return fallback;
-  }
-}
-
-function saveJSON(key, value) {
-  try {
-    localStorage.setItem(
-      key,
-      JSON.stringify(value)
-    );
-  } catch (error) {
-    console.error('Storage save error:', error);
-  }
-}
-
-function saveAllData() {
-  saveJSON(STORAGE.chat, chatHistory);
-  saveJSON(STORAGE.notes, notes);
-  saveJSON(STORAGE.tasks, tasks);
+  --sidebar-width: 250px;
 }
 
 /* =========================================================
-   STATUS
+   RESET
 ========================================================= */
 
-function setStatus(text) {
-  if (statusText) {
-    statusText.textContent = text;
-  }
+* {
+  box-sizing: border-box;
 }
 
-function setThinking(active) {
-  isThinking = active;
+html {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+}
 
-  if (active) {
-    setStatus('THINKING...');
+body {
+  margin: 0;
+  min-height: 100vh;
 
-    aiOrb?.classList.add('ai-active');
-  } else {
-    setStatus('AI ONLINE');
+  font-family:
+    Inter,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
 
-    aiOrb?.classList.remove('ai-active');
-  }
+  background: var(--bg);
+  color: var(--text);
+
+  overflow-x: hidden;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+.hidden {
+  display: none !important;
 }
 
 /* =========================================================
-   MESSAGE RENDERING
+   BACKGROUND
 ========================================================= */
 
-function addMessage(
-  text,
-  role = 'assistant',
-  save = false
-) {
-  if (!messagesEl) return null;
+body::before {
+  content: "";
 
-  const item = document.createElement('div');
+  position: fixed;
+  inset: 0;
 
-  item.className = `message ${role}`;
+  pointer-events: none;
 
-  const bubble = document.createElement('div');
-
-  bubble.className = 'bubble';
-
-  bubble.textContent = String(text);
-
-  item.appendChild(bubble);
-
-  messagesEl.appendChild(item);
-
-  messagesEl.scrollTop =
-    messagesEl.scrollHeight;
-
-  if (save) {
-    chatHistory.push({
-      role:
-        role === 'user'
-          ? 'user'
-          : 'assistant',
-      content: String(text)
-    });
-
-    saveJSON(
-      STORAGE.chat,
-      chatHistory
-    );
-  }
-
-  return item;
-}
-
-/* =========================================================
-   THINKING MESSAGE
-========================================================= */
-
-function addThinkingMessage() {
-  if (!messagesEl) return null;
-
-  const item = document.createElement('div');
-
-  item.className =
-    'message assistant';
-
-  const bubble =
-    document.createElement('div');
-
-  bubble.className = 'bubble';
-
-  bubble.innerHTML = `
-    <div class="ai-thinking">
-      <strong>Gaurav AI</strong>
-      <span></span>
-      <span></span>
-      <span></span>
-    </div>
-  `;
-
-  item.appendChild(bubble);
-
-  messagesEl.appendChild(item);
-
-  messagesEl.scrollTop =
-    messagesEl.scrollHeight;
-
-  return item;
-}
-
-/* =========================================================
-   TYPING EFFECT
-========================================================= */
-
-async function typeMessage(
-  text,
-  role = 'assistant',
-  save = true
-) {
-  if (!messagesEl) return null;
-
-  const item =
-    document.createElement('div');
-
-  item.className =
-    `message ${role}`;
-
-  const bubble =
-    document.createElement('div');
-
-  bubble.className = 'bubble';
-
-  item.appendChild(bubble);
-
-  messagesEl.appendChild(item);
-
-  const characters =
-    [...String(text)];
-
-  let current = '';
-
-  for (
-    let i = 0;
-    i < characters.length;
-    i++
-  ) {
-    current += characters[i];
-
-    bubble.textContent =
-      current;
-
-    messagesEl.scrollTop =
-      messagesEl.scrollHeight;
-
-    let delay = 8;
-
-    if (
-      characters[i] === '.' ||
-      characters[i] === '!' ||
-      characters[i] === '?'
-    ) {
-      delay = 35;
-    }
-
-    await wait(delay);
-  }
-
-  if (save) {
-    chatHistory.push({
-      role:
-        role === 'user'
-          ? 'user'
-          : 'assistant',
-      content: String(text)
-    });
-
-    saveJSON(
-      STORAGE.chat,
-      chatHistory
-    );
-  }
-
-  return item;
-}
-
-function wait(ms) {
-  return new Promise(
-    (resolve) =>
-      setTimeout(resolve, ms)
-  );
-}
-
-/* =========================================================
-   RESTORE CHAT
-========================================================= */
-
-function restoreChat() {
-  if (!messagesEl) return;
-
-  messagesEl.innerHTML = '';
-
-  if (!chatHistory.length) {
-    showWelcomeMessage();
-    return;
-  }
-
-  chatHistory.forEach((message) => {
-    addMessage(
-      message.content,
-      message.role === 'user'
-        ? 'user'
-        : 'assistant',
-      false
-    );
-  });
-}
-
-function showWelcomeMessage() {
-  addMessage(
-    'Namaste Gaurav 👋',
-    'assistant',
-    false
-  );
-
-  addMessage(
-    'Main Gaurav AI hoon — tumhara personal AI assistant. 🤖',
-    'assistant',
-    false
-  );
-
-  addMessage(
-    'Tum mujhse normal chat, questions, calculations, notes aur tasks ke baare mein baat kar sakte ho.',
-    'assistant',
-    false
-  );
-}
-
-/* =========================================================
-   SEND MESSAGE TO BACKEND
-========================================================= */
-
-async function sendToAI(text) {
-  const cleanText =
-    String(text || '').trim();
-
-  if (!cleanText || isThinking) {
-    return;
-  }
-
-  addMessage(
-    cleanText,
-    'user',
-    true
-  );
-
-  userInput.value = '';
-
-  setThinking(true);
-
-  const thinking =
-    addThinkingMessage();
-
-  try {
-    const response =
-      await fetch(
-        '/api/chat',
-        {
-          method: 'POST',
-
-          headers: {
-            'Content-Type':
-              'application/json'
-          },
-
-          body: JSON.stringify({
-            messages:
-              chatHistory.slice(-12)
-          })
-        }
-      );
-
-    let data;
-
-    try {
-      data =
-        await response.json();
-    } catch {
-      data = {};
-    }
-
-    console.log(
-      'Gaurav AI API:',
-      response.status,
-      data
+  background:
+    radial-gradient(
+      circle at 10% 10%,
+      rgba(118, 87, 255, 0.14),
+      transparent 30%
+    ),
+    radial-gradient(
+      circle at 90% 90%,
+      rgba(0, 217, 255, 0.09),
+      transparent 30%
     );
 
-    thinking?.remove();
+  z-index: -3;
+}
 
-    if (!response.ok) {
-      throw new Error(
-        data.error ||
-        `Server error ${response.status}`
-      );
-    }
+.bg-orb {
+  position: fixed;
 
-    const reply =
-      String(
-        data.reply ||
-        data.message ||
-        'Mujhe abhi response nahi mila.'
-      );
+  width: 380px;
+  height: 380px;
 
-    setThinking(false);
+  border-radius: 50%;
 
-    await typeMessage(
-      reply,
-      'assistant',
-      true
+  filter: blur(100px);
+
+  opacity: 0.13;
+
+  pointer-events: none;
+
+  z-index: -2;
+}
+
+.orb-1 {
+  top: -170px;
+  left: -160px;
+  background: #704cff;
+}
+
+.orb-2 {
+  right: -180px;
+  bottom: -190px;
+  background: #00cfff;
+}
+
+/* =========================================================
+   APP
+========================================================= */
+
+.app-shell {
+  min-height: 100vh;
+
+  display: flex;
+
+  position: relative;
+}
+
+/* =========================================================
+   SIDEBAR
+========================================================= */
+
+.sidebar {
+  width: var(--sidebar-width);
+
+  min-width: var(--sidebar-width);
+
+  min-height: 100vh;
+
+  padding: 22px 14px;
+
+  border-right: 1px solid var(--line);
+
+  background:
+    rgba(5, 8, 20, 0.82);
+
+  backdrop-filter: blur(25px);
+
+  display: flex;
+  flex-direction: column;
+
+  gap: 20px;
+
+  z-index: 100;
+}
+
+.brand {
+  display: flex;
+
+  align-items: center;
+
+  gap: 10px;
+
+  padding: 4px 8px;
+}
+
+.brand-orb {
+  width: 42px;
+  height: 42px;
+
+  flex-shrink: 0;
+
+  border-radius: 13px;
+
+  display: grid;
+  place-items: center;
+
+  background:
+    linear-gradient(
+      135deg,
+      var(--accent),
+      var(--accent-2)
     );
 
-  } catch (error) {
-    console.error(
-      'Gaurav AI Chat Error:',
-      error
-    );
+  box-shadow:
+    0 0 25px rgba(118, 87, 255, 0.4),
+    0 0 50px rgba(0, 217, 255, 0.1);
 
-    thinking?.remove();
+  font-size: 20px;
 
-    setThinking(false);
+  animation: brandGlow 3s infinite ease-in-out;
+}
 
-    await typeMessage(
-      `⚠️ Gaurav AI se connection mein problem aa gayi.\n\n${error.message}`,
-      'assistant',
-      true
-    );
+@keyframes brandGlow {
+  50% {
+    transform: scale(1.04) rotate(3deg);
+
+    box-shadow:
+      0 0 38px rgba(118, 87, 255, 0.6),
+      0 0 65px rgba(0, 217, 255, 0.15);
   }
+}
+
+.brand strong,
+.brand span {
+  display: block;
+}
+
+.brand strong {
+  font-size: 13px;
+  letter-spacing: 1.7px;
+}
+
+.brand span {
+  margin-top: 4px;
+
+  color: var(--muted);
+
+  font-size: 10px;
+}
+
+/* =========================================================
+   BUTTONS
+========================================================= */
+
+.new-chat,
+.nav-item,
+.primary-btn,
+.quick-card,
+.icon-btn,
+.send-btn,
+.calc-grid button {
+  border: 0;
+
+  color: inherit;
+
+  background: transparent;
+}
+
+/* =========================================================
+   NEW CHAT
+========================================================= */
+
+.new-chat {
+  width: 100%;
+
+  padding: 13px 14px;
+
+  border: 1px solid var(--line);
+
+  border-radius: 14px;
+
+  background:
+    linear-gradient(
+      135deg,
+      rgba(118, 87, 255, 0.2),
+      rgba(0, 217, 255, 0.06)
+    );
+
+  text-align: left;
+
+  transition: 0.2s;
+}
+
+.new-chat:hover {
+  transform: translateY(-2px);
+
+  border-color:
+    rgba(118, 87, 255, 0.5);
+}
+
+/* =========================================================
+   NAV
+========================================================= */
+
+.nav-item {
+  width: 100%;
+
+  padding: 11px 12px;
+
+  margin: 3px 0;
+
+  border-radius: 11px;
+
+  color: var(--muted);
+
+  display: flex;
+
+  align-items: center;
+
+  gap: 10px;
+
+  text-align: left;
+
+  transition: 0.2s;
+}
+
+.nav-item:hover,
+.nav-item.active {
+  color: var(--text);
+
+  background:
+    rgba(255, 255, 255, 0.07);
+}
+
+.nav-item.active {
+  box-shadow:
+    inset 2px 0 0 var(--accent-2);
+}
+
+.nav-item b {
+  margin-left: auto;
+
+  padding: 3px 7px;
+
+  border-radius: 10px;
+
+  font-size: 10px;
+
+  background:
+    rgba(255, 255, 255, 0.08);
+}
+
+.sidebar-bottom {
+  margin-top: auto;
+}
+
+/* =========================================================
+   MAIN PANEL
+========================================================= */
+
+.main-panel {
+  flex: 1;
+
+  min-width: 0;
+
+  min-height: 100vh;
+
+  display: flex;
+
+  flex-direction: column;
+
+  position: relative;
+}
+
+/* =========================================================
+   TOPBAR
+========================================================= */
+
+.topbar {
+  height: 82px;
+
+  flex-shrink: 0;
+
+  padding: 16px 30px;
+
+  border-bottom: 1px solid var(--line);
+
+  background:
+    rgba(7, 11, 24, 0.42);
+
+  backdrop-filter: blur(18px);
+
+  display: flex;
+
+  align-items: center;
+
+  justify-content: space-between;
+
+  gap: 15px;
+
+  position: sticky;
+
+  top: 0;
+
+  z-index: 50;
+}
+
+.eyebrow {
+  font-size: 10px;
+
+  letter-spacing: 1.5px;
+
+  color: #8490b1;
+
+  font-weight: 700;
+}
+
+.eyebrow span {
+  color: var(--success);
+}
+
+.topbar h1 {
+  margin: 6px 0 0;
+
+  font-size: 20px;
+
+  line-height: 1.2;
+}
+
+.clock {
+  color: var(--muted);
+
+  font-size: 13px;
+
+  font-variant-numeric: tabular-nums;
+
+  white-space: nowrap;
+}
+
+.mobile-menu {
+  display: none;
+
+  border: 0;
+
+  background: transparent;
+
+  color: var(--text);
+
+  font-size: 23px;
+
+  padding: 5px;
+}
+
+/* =========================================================
+   CONTENT
+========================================================= */
+
+.content {
+  width: min(980px, calc(100% - 48px));
+
+  margin: 0 auto;
+
+  flex: 1;
+
+  padding: 28px 0 125px;
+}
+
+.view {
+  width: 100%;
+}
+
+/* =========================================================
+   HERO
+========================================================= */
+
+.hero {
+  text-align: center;
+
+  padding:
+    8px 0 25px;
+}
+
+.ai-orb {
+  width: 118px;
+  height: 118px;
+
+  margin: 0 auto 18px;
+
+  border-radius: 50%;
+
+  display: grid;
+
+  place-items: center;
+
+  background:
+    radial-gradient(
+      circle at 35% 30%,
+      #eeeaff 0 4%,
+      #8063ff 13%,
+      #34277e 43%,
+      #11162e 70%
+    );
+
+  box-shadow:
+    0 0 40px rgba(118, 87, 255, 0.42),
+    0 0 85px rgba(0, 217, 255, 0.1),
+    inset 0 0 28px rgba(0, 217, 255, 0.16);
+
+  animation: orbFloat 4s ease-in-out infinite;
+
+  transition: 0.3s;
+}
+
+.orb-core {
+  width: 56px;
+  height: 56px;
+
+  border-radius: 50%;
+
+  display: grid;
+  place-items: center;
+
+  background:
+    rgba(255, 255, 255, 0.08);
+
+  border:
+    1px solid rgba(255, 255, 255, 0.22);
+
+  font-size: 24px;
+
+  box-shadow:
+    0 0 22px rgba(0, 217, 255, 0.25);
+}
+
+@keyframes orbFloat {
+  50% {
+    transform: translateY(-7px);
+
+    box-shadow:
+      0 0 65px rgba(118, 87, 255, 0.58),
+      0 0 100px rgba(0, 217, 255, 0.12),
+      inset 0 0 35px rgba(0, 217, 255, 0.2);
+  }
+}
+
+.ai-orb.ai-active {
+  animation:
+    aiThinkingPulse 1.3s infinite ease-in-out;
+}
+
+@keyframes aiThinkingPulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.08);
+
+    box-shadow:
+      0 0 80px rgba(118, 87, 255, 0.75),
+      0 0 120px rgba(0, 217, 255, 0.2);
+  }
+}
+
+.hello {
+  margin: 0 0 5px;
+
+  color: #a8b2d1;
+}
+
+.hero h2 {
+  margin: 0 0 8px;
+
+  font-size: 31px;
+
+  line-height: 1.2;
+}
+
+.muted {
+  margin: 0;
+
+  color: var(--muted);
+}
+
+/* =========================================================
+   QUICK ACTIONS
+========================================================= */
+
+.quick-grid {
+  display: grid;
+
+  grid-template-columns:
+    repeat(4, 1fr);
+
+  gap: 12px;
+}
+
+.quick-card {
+  min-height: 110px;
+
+  padding: 16px;
+
+  border:
+    1px solid var(--line);
+
+  border-radius: 17px;
+
+  background:
+    var(--panel);
+
+  box-shadow:
+    var(--shadow);
+
+  text-align: left;
+
+  transition:
+    transform 0.2s,
+    border-color 0.2s,
+    background 0.2s;
+}
+
+.quick-card:hover {
+  transform: translateY(-4px);
+
+  border-color:
+    rgba(118, 87, 255, 0.55);
+
+  background:
+    rgba(25, 31, 62, 0.92);
+}
+
+.quick-card span,
+.quick-card small {
+  display: block;
+}
+
+.quick-card span {
+  margin-top: 10px;
+
+  font-size: 13px;
+
+  font-weight: 700;
+}
+
+.quick-card small {
+  margin-top: 4px;
+
+  color: var(--muted);
+
+  font-size: 10px;
+}
+
+/* =========================================================
+   CHAT MESSAGES
+========================================================= */
+
+.messages {
+  display: flex;
+
+  flex-direction: column;
+
+  gap: 13px;
+
+  margin-top: 25px;
+
+  scroll-behavior: smooth;
+}
+
+.message {
+  max-width: 78%;
+
+  font-size: 13px;
+
+  line-height: 1.6;
+
+  white-space: pre-wrap;
+
+  word-break: break-word;
+}
+
+.message .bubble {
+  padding: 13px 16px;
+
+  border-radius: 17px;
+
+  animation:
+    messageIn 0.3s ease-out;
+}
+
+.message.assistant {
+  align-self: flex-start;
+}
+
+.message.assistant .bubble {
+  background:
+    linear-gradient(
+      145deg,
+      rgba(24, 31, 62, 0.94),
+      rgba(15, 20, 42, 0.9)
+    );
+
+  border:
+    1px solid var(--line);
+
+  box-shadow:
+    0 10px 30px rgba(0, 0, 0, 0.15);
+}
+
+.message.user {
+  align-self: flex-end;
+}
+
+.message.user .bubble {
+  background:
+    linear-gradient(
+      135deg,
+      #6750df,
+      #3988c8
+    );
+
+  box-shadow:
+    0 12px 35px rgba(65, 76, 190, 0.24);
+}
+
+@keyframes messageIn {
+  from {
+    opacity: 0;
+
+    transform:
+      translateY(8px)
+      scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+
+    transform:
+      translateY(0)
+      scale(1);
+  }
+}
+
+/* =========================================================
+   THINKING
+========================================================= */
+
+.ai-thinking {
+  display: inline-flex;
+
+  align-items: center;
+
+  gap: 6px;
+}
+
+.ai-thinking span {
+  width: 6px;
+  height: 6px;
+
+  border-radius: 50%;
+
+  background:
+    var(--accent-2);
+
+  animation:
+    thinkingDot 1.15s infinite ease-in-out;
+}
+
+.ai-thinking span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.ai-thinking span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes thinkingDot {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.35;
+  }
+
+  30% {
+    transform: translateY(-5px);
+    opacity: 1;
+  }
+}
+
+/* =========================================================
+   SECTION HEAD
+========================================================= */
+
+.section-head {
+  display: flex;
+
+  align-items: center;
+
+  justify-content: space-between;
+
+  gap: 15px;
+
+  margin-bottom: 20px;
+}
+
+.section-head h2 {
+  margin: 6px 0 0;
+
+  font-size: 28px;
+}
+
+.primary-btn {
+  border: 0;
+
+  padding: 11px 15px;
+
+  border-radius: 12px;
+
+  background:
+    linear-gradient(
+      135deg,
+      var(--accent),
+      #4d8cff
+    );
+
+  color: white;
+
+  font-weight: 700;
+
+  font-size: 12px;
+
+  transition: 0.2s;
+}
+
+.primary-btn:hover {
+  transform: translateY(-2px);
+
+  box-shadow:
+    0 10px 25px
+    rgba(118, 87, 255, 0.25);
+}
+
+/* =========================================================
+   FORMS
+========================================================= */
+
+.note-form,
+.task-form {
+  display: flex;
+
+  gap: 10px;
+
+  margin-bottom: 16px;
+}
+
+.note-form input,
+.task-form input {
+  flex: 1;
+}
+
+.note-form input,
+.task-form input,
+.composer input,
+.calculator input {
+  min-width: 0;
+
+  color: var(--text);
+
+  background:
+    rgba(255, 255, 255, 0.055);
+
+  border:
+    1px solid var(--line);
+
+  outline: none;
+
+  border-radius: 13px;
+
+  padding: 13px 14px;
+}
+
+.note-form input:focus,
+.task-form input:focus,
+.composer input:focus,
+.calculator input:focus {
+  border-color:
+    rgba(118, 87, 255, 0.7);
+}
+
+/* =========================================================
+   DATA CARDS
+========================================================= */
+
+.cards-list {
+  display: grid;
+
+  gap: 10px;
+}
+
+.data-card,
+.card {
+  padding: 15px 16px;
+
+  background:
+    var(--panel);
+
+  border:
+    1px solid var(--line);
+
+  border-radius: 15px;
+
+  display: flex;
+
+  gap: 12px;
+
+  align-items: center;
+}
+
+.data-card .body,
+.card > div:first-child {
+  flex: 1;
+
+  min-width: 0;
+}
+
+.data-card p,
+.card p {
+  margin: 5px 0 0;
+
+  font-size: 13px;
+
+  line-height: 1.45;
+
+  word-break: break-word;
+}
+
+.data-card small,
+.card small {
+  display: block;
+
+  margin-top: 5px;
+
+  color: var(--muted);
+
+  font-size: 10px;
+}
+
+.card button {
+  border: 1px solid var(--line);
+
+  border-radius: 9px;
+
+  padding: 7px 10px;
+
+  background:
+    rgba(255, 255, 255, 0.05);
+
+  color: var(--text);
+
+  cursor: pointer;
+}
+
+.card button:hover {
+  background:
+    rgba(255, 255, 255, 0.1);
+}
+
+.card button.danger {
+  color: #ff829b;
+}
+
+.delete-btn {
+  border: 0;
+
+  background: transparent;
+
+  color: #8490b1;
+
+  cursor: pointer;
 }
 
 /* =========================================================
    CALCULATOR
 ========================================================= */
 
-function calculate(expression) {
-  try {
-    const clean =
-      String(expression)
-        .replace(
-          /^calculator\s*/i,
-          ''
-        )
-        .replace(
-          /×/g,
-          '*'
-        )
-        .replace(
-          /÷/g,
-          '/'
-        )
-        .replace(
-          /[^0-9+\-*/().% ]/g,
-          ''
-        );
+.calculator {
+  width: min(390px, 100%);
 
-    if (!clean.trim()) {
-      return (
-        '🧮 Calculator mein expression do.\n\n' +
-        'Example:\ncalculator 125*8'
+  margin:
+    25px auto 0;
+
+  padding: 18px;
+
+  border:
+    1px solid var(--line);
+
+  border-radius: 22px;
+
+  background:
+    var(--panel);
+
+  box-shadow:
+    var(--shadow);
+}
+
+.calculator input {
+  width: 100%;
+
+  height: 72px;
+
+  margin-bottom: 12px;
+
+  text-align: right;
+
+  font-size: 28px;
+}
+
+.calc-grid {
+  display: grid;
+
+  grid-template-columns:
+    repeat(4, 1fr);
+
+  gap: 8px;
+}
+
+.calc-grid button {
+  height: 56px;
+
+  border-radius: 13px;
+
+  background:
+    rgba(255, 255, 255, 0.065);
+
+  color: var(--text);
+
+  font-size: 16px;
+
+  transition: 0.15s;
+}
+
+.calc-grid button:hover {
+  transform: translateY(-1px);
+
+  background:
+    rgba(255, 255, 255, 0.12);
+}
+
+.calc-grid .operator {
+  color: #9bb0ff;
+}
+
+.calc-grid .equals {
+  background:
+    linear-gradient(
+      135deg,
+      var(--accent),
+      #478fff
+    );
+}
+
+.calc-grid .danger {
+  color: #ff829b;
+}
+
+.calc-grid .wide {
+  grid-column: span 2;
+}
+
+/* =========================================================
+   CHAT COMPOSER
+========================================================= */
+
+.composer {
+  position: fixed;
+
+  left:
+    calc(
+      var(--sidebar-width) +
+      (100% - var(--sidebar-width)) / 2
+    );
+
+  bottom: 22px;
+
+  transform:
+    translateX(-50%);
+
+  width:
+    min(
+      850px,
+      calc(100% - var(--sidebar-width) - 60px)
+    );
+
+  min-height: 60px;
+
+  display: flex;
+
+  align-items: center;
+
+  gap: 9px;
+
+  padding: 8px;
+
+  background:
+    rgba(12, 17, 35, 0.94);
+
+  border:
+    1px solid rgba(255, 255, 255, 0.13);
+
+  border-radius: 18px;
+
+  backdrop-filter: blur(20px);
+
+  box-shadow:
+    0 20px 55px rgba(0, 0, 0, 0.4);
+
+  z-index: 80;
+
+  transition: 0.2s;
+}
+
+.composer:focus-within {
+  transform:
+    translateX(-50%)
+    translateY(-2px);
+
+  border-color:
+    rgba(118, 87, 255, 0.45);
+
+  box-shadow:
+    0 20px 65px rgba(0, 0, 0, 0.48),
+    0 0 35px rgba(118, 87, 255, 0.08);
+}
+
+.composer input {
+  flex: 1;
+
+  border: 0;
+
+  background: transparent;
+
+  padding: 12px 4px;
+}
+
+.composer input::placeholder {
+  color: #737d9d;
+}
+
+.icon-btn,
+.send-btn {
+  width: 42px;
+  height: 42px;
+
+  flex-shrink: 0;
+
+  border-radius: 12px;
+
+  transition: 0.2s;
+}
+
+.icon-btn {
+  background:
+    rgba(255, 255, 255, 0.06);
+}
+
+.icon-btn:hover {
+  background:
+    rgba(255, 255, 255, 0.12);
+}
+
+.send-btn {
+  background:
+    linear-gradient(
+      135deg,
+      var(--accent),
+      #398dff
+    );
+}
+
+.send-btn:hover {
+  transform: scale(1.04);
+
+  box-shadow:
+    0 8px 25px
+    rgba(118, 87, 255, 0.35);
+}
+
+/* =========================================================
+   TIP
+========================================================= */
+
+.tip {
+  position: fixed;
+
+  bottom: 3px;
+
+  left:
+    calc(
+      var(--sidebar-width) +
+      (100% - var(--sidebar-width)) / 2
+    );
+
+  transform:
+    translateX(-50%);
+
+  margin: 0;
+
+  color: #6f7894;
+
+  font-size: 9px;
+
+  z-index: 81;
+}
+
+/* =========================================================
+   TOAST
+========================================================= */
+
+.toast {
+  position: fixed;
+
+  top: 20px;
+  right: 20px;
+
+  padding: 11px 14px;
+
+  border:
+    1px solid var(--line);
+
+  border-radius: 12px;
+
+  background:
+    #141b34;
+
+  font-size: 12px;
+
+  opacity: 0;
+
+  transform:
+    translateY(-8px);
+
+  transition: 0.25s;
+
+  z-index: 200;
+}
+
+.toast.show {
+  opacity: 1;
+
+  transform:
+    translateY(0);
+}
+
+/* =========================================================
+   LIGHT THEME
+========================================================= */
+
+body.light,
+body.light-theme {
+  --bg: #f4f6ff;
+
+  --panel:
+    rgba(255, 255, 255, 0.82);
+
+  --panel-strong: #ffffff;
+
+  --text: #14182b;
+
+  --muted: #68718a;
+
+  --line:
+    rgba(20, 30, 60, 0.1);
+}
+
+body.light .sidebar,
+body.light-theme .sidebar {
+  background:
+    rgba(255, 255, 255, 0.8);
+}
+
+body.light .topbar,
+body.light-theme .topbar {
+  background:
+    rgba(255, 255, 255, 0.55);
+}
+
+body.light .composer,
+body.light-theme .composer {
+  background:
+    rgba(255, 255, 255, 0.94);
+}
+
+body.light .calc-grid button,
+body.light-theme .calc-grid button {
+  background:
+    rgba(20, 30, 60, 0.05);
+}
+
+body.light .message.assistant .bubble,
+body.light-theme .message.assistant .bubble {
+  background: #ffffff;
+}
+
+/* =========================================================
+   TABLET
+========================================================= */
+
+@media (max-width: 900px) {
+
+  :root {
+    --sidebar-width: 235px;
+  }
+
+  .content {
+    width:
+      min(
+        100% - 36px,
+        760px
       );
-    }
+  }
 
-    const result =
-      Function(
-        `"use strict"; return (${clean})`
-      )();
+  .quick-grid {
+    grid-template-columns:
+      repeat(2, 1fr);
+  }
 
-    if (
-      typeof result !== 'number' ||
-      !Number.isFinite(result)
-    ) {
-      return '❌ Invalid calculation.';
-    }
-
-    return `🧮 Answer: ${result}`;
-
-  } catch (error) {
-    console.error(
-      'Calculator error:',
-      error
-    );
-
-    return (
-      '❌ Calculation samajh nahi aayi.'
-    );
+  .composer {
+    width:
+      min(
+        760px,
+        calc(100% - var(--sidebar-width) - 40px)
+      );
   }
 }
 
 /* =========================================================
-   NOTE SYSTEM
+   MOBILE
 ========================================================= */
 
-function addNote(text) {
-  const clean =
-    String(text || '').trim();
+@media (max-width: 820px) {
 
-  if (!clean) return;
-
-  const note = {
-    id: Date.now(),
-    text: clean,
-    date:
-      new Date().toLocaleString()
-  };
-
-  notes.unshift(note);
-
-  saveJSON(
-    STORAGE.notes,
-    notes
-  );
-
-  renderNotes();
-  updateCounts();
-}
-
-function renderNotes() {
-  const list =
-    $('notesList');
-
-  if (!list) return;
-
-  list.innerHTML = '';
-
-  if (!notes.length) {
-    list.innerHTML =
-      '<p class="muted">No notes yet.</p>';
-
-    return;
+  .app-shell {
+    display: block;
   }
 
-  notes.forEach((note) => {
-    const card =
-      document.createElement('div');
+  .sidebar {
+    position: fixed;
 
-    card.className =
-      'data-card';
+    top: 0;
+    left: -285px;
+    bottom: 0;
 
-    card.innerHTML = `
-      <div class="body">
-        <strong>📝 Note</strong>
-        <p>${escapeHtml(note.text)}</p>
-        <small>${escapeHtml(note.date)}</small>
-      </div>
+    width: 270px;
 
-      <button
-        class="delete-btn"
-        data-delete-note="${note.id}"
-        title="Delete note"
-      >
-        🗑️
-      </button>
-    `;
+    min-width: 270px;
 
-    list.appendChild(card);
-  });
-}
+    transition:
+      left 0.25s ease;
 
-/* =========================================================
-   TASK SYSTEM
-========================================================= */
-
-function addTask(text) {
-  const clean =
-    String(text || '').trim();
-
-  if (!clean) return;
-
-  const task = {
-    id: Date.now(),
-    text: clean,
-    done: false,
-    date:
-      new Date().toLocaleString()
-  };
-
-  tasks.unshift(task);
-
-  saveJSON(
-    STORAGE.tasks,
-    tasks
-  );
-
-  renderTasks();
-  updateCounts();
-}
-
-function renderTasks() {
-  const list =
-    $('tasksList');
-
-  if (!list) return;
-
-  list.innerHTML = '';
-
-  if (!tasks.length) {
-    list.innerHTML =
-      '<p class="muted">No tasks yet.</p>';
-
-    return;
+    box-shadow:
+      20px 0 60px
+      rgba(0, 0, 0, 0.4);
   }
 
-  tasks.forEach((task) => {
-    const card =
-      document.createElement('div');
-
-    card.className =
-      `data-card task-card ${
-        task.done ? 'done' : ''
-      }`;
-
-    card.innerHTML = `
-      <button
-        class="task-check"
-        data-toggle-task="${task.id}"
-        title="Mark task"
-      >
-        ${task.done ? '✓' : ''}
-      </button>
-
-      <div class="body">
-        <strong>
-          ${task.done ? '✅' : '⬜'} Task
-        </strong>
-
-        <p>${escapeHtml(task.text)}</p>
-
-        <small>
-          ${escapeHtml(task.date)}
-        </small>
-      </div>
-
-      <button
-        class="delete-btn"
-        data-delete-task="${task.id}"
-        title="Delete task"
-      >
-        🗑️
-      </button>
-    `;
-
-    list.appendChild(card);
-  });
-}
-
-/* =========================================================
-   COUNTERS
-========================================================= */
-
-function updateCounts() {
-  const noteCount =
-    $('noteCount');
-
-  const taskCount =
-    $('taskCount');
-
-  if (noteCount) {
-    noteCount.textContent =
-      notes.length;
+  .sidebar.open {
+    left: 0;
   }
 
-  if (taskCount) {
-    taskCount.textContent =
-      tasks.filter(
-        (task) => !task.done
-      ).length;
+  .main-panel {
+    width: 100%;
+
+    min-height: 100vh;
+  }
+
+  .mobile-menu {
+    display: block;
+  }
+
+  .topbar {
+    height: 72px;
+
+    padding:
+      14px 16px;
+  }
+
+  .topbar h1 {
+    font-size: 17px;
+  }
+
+  .clock {
+    font-size: 11px;
+  }
+
+  .content {
+    width:
+      calc(100% - 24px);
+
+    padding:
+      22px 0 105px;
+  }
+
+  .hero {
+    padding:
+      5px 0 22px;
+  }
+
+  .hero h2 {
+    font-size: 26px;
+  }
+
+  .ai-orb {
+    width: 96px;
+    height: 96px;
+  }
+
+  .orb-core {
+    width: 45px;
+    height: 45px;
+
+    font-size: 20px;
+  }
+
+  .quick-grid {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+
+    gap: 8px;
+  }
+
+  .quick-card {
+    min-height: 100px;
+
+    padding: 13px;
+  }
+
+  .message {
+    max-width: 91%;
+  }
+
+  .composer {
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+
+    width: auto;
+
+    transform: none;
+
+    min-height: 56px;
+  }
+
+  .composer:focus-within {
+    transform:
+      translateY(-2px);
+  }
+
+  .tip {
+    display: none;
+  }
+
+  .section-head {
+    align-items: flex-start;
+  }
+
+  .section-head h2 {
+    font-size: 24px;
+  }
+
+  .calculator {
+    margin-top: 20px;
   }
 }
 
 /* =========================================================
-   SAFE HTML
+   SMALL PHONES
 ========================================================= */
 
-function escapeHtml(value) {
-  return String(value)
-    .replaceAll(
-      '&',
-      '&amp;'
-    )
-    .replaceAll(
-      '<',
-      '&lt;'
-    )
-    .replaceAll(
-      '>',
-      '&gt;'
-    )
-    .replaceAll(
-      '"',
-      '&quot;'
-    )
-    .replaceAll(
-      "'",
-      '&#039;'
-    );
-}
+@media (max-width: 460px) {
 
-/* =========================================================
-   VIEWS
-========================================================= */
-
-function showView(view) {
-  document
-    .querySelectorAll('.view')
-    .forEach((el) => {
-      el.classList.add('hidden');
-    });
-
-  const target =
-    $(`${view}View`);
-
-  if (target) {
-    target.classList.remove(
-      'hidden'
-    );
+  .topbar {
+    padding:
+      13px 12px;
   }
 
-  document
-    .querySelectorAll(
-      '.nav-item[data-view]'
-    )
-    .forEach((button) => {
-      button.classList.toggle(
-        'active',
-        button.dataset.view === view
-      );
-    });
-
-  const titles = {
-    chat:
-      'Gaurav AI Assistant',
-
-    notes:
-      'Gaurav AI Notes',
-
-    tasks:
-      'Gaurav AI Tasks',
-
-    calculator:
-      'Gaurav AI Calculator'
-  };
-
-  if ($('pageTitle')) {
-    $('pageTitle').textContent =
-      titles[view] ||
-      'Gaurav AI Assistant';
+  .topbar h1 {
+    font-size: 16px;
   }
 
-  if (view === 'notes') {
-    renderNotes();
+  .eyebrow {
+    font-size: 8px;
+
+    letter-spacing: 1.2px;
   }
 
-  if (view === 'tasks') {
-    renderTasks();
+  .clock {
+    font-size: 10px;
   }
 
-  if (
-    window.innerWidth <= 820
-  ) {
-    $('sidebar')?.classList.remove(
-      'open'
-    );
+  .content {
+    width:
+      calc(100% - 18px);
+
+    padding-top: 18px;
   }
-}
 
-/* =========================================================
-   BACKEND HEALTH
-========================================================= */
-
-async function checkBackend() {
-  try {
-    const response =
-      await fetch(
-        '/api/health',
-        {
-          cache: 'no-store'
-        }
-      );
-
-    const data =
-      await response.json();
-
-    console.log(
-      'Gaurav AI Backend:',
-      data
-    );
-
-    if (
-      response.ok &&
-      data.ok &&
-      data.aiConfigured
-    ) {
-      setStatus('AI ONLINE');
-    } else {
-      setStatus('AI OFFLINE');
-    }
-
-  } catch (error) {
-    console.error(
-      'Health check failed:',
-      error
-    );
-
-    setStatus('OFFLINE');
+  .quick-grid {
+    grid-template-columns:
+      1fr 1fr;
   }
-}
 
-/* =========================================================
-   COMPOSER
-========================================================= */
-
-composer?.addEventListener(
-  'submit',
-  async (event) => {
-    event.preventDefault();
-
-    const text =
-      userInput.value.trim();
-
-    if (!text) return;
-
-    /* Calculator */
-    if (
-      /^calculator\s+/i.test(text)
-    ) {
-      addMessage(
-        text,
-        'user',
-        true
-      );
-
-      userInput.value = '';
-
-      addMessage(
-        calculate(text),
-        'assistant',
-        true
-      );
-
-      return;
-    }
-
-    /* Note */
-    if (
-      /^note\s+/i.test(text)
-    ) {
-      const noteText =
-        text
-          .replace(
-            /^note\s+/i,
-            ''
-          )
-          .trim();
-
-      addMessage(
-        text,
-        'user',
-        true
-      );
-
-      userInput.value = '';
-
-      if (noteText) {
-        addNote(noteText);
-
-        addMessage(
-          `📝 Note saved: ${noteText}`,
-          'assistant',
-          true
-        );
-      }
-
-      return;
-    }
-
-    /* Task */
-    if (
-      /^add task\s+/i.test(text)
-    ) {
-      const taskText =
-        text
-          .replace(
-            /^add task\s+/i,
-            ''
-          )
-          .trim();
-
-      addMessage(
-        text,
-        'user',
-        true
-      );
-
-      userInput.value = '';
-
-      if (taskText) {
-        addTask(taskText);
-
-        addMessage(
-          `✅ Task added: ${taskText}`,
-          'assistant',
-          true
-        );
-      }
-
-      return;
-    }
-
-    /* Normal AI */
-    await sendToAI(text);
-  }
-);
-
-/* =========================================================
-   QUICK CARDS
-========================================================= */
-
-document
-  .querySelectorAll('.quick-card')
-  .forEach((button) => {
-
-    button.addEventListener(
-      'click',
-      () => {
-
-        const command =
-          button.dataset.command ||
-          '';
-
-        if (
-          /^calculator\s+/i.test(
-            command
-          )
-        ) {
-          addMessage(
-            command,
-            'user',
-            true
-          );
-
-          addMessage(
-            calculate(command),
-            'assistant',
-            true
-          );
-
-          return;
-        }
-
-        if (
-          /^note\s+/i.test(command)
-        ) {
-          const text =
-            command
-              .replace(
-                /^note\s+/i,
-                ''
-              )
-              .trim();
-
-          addMessage(
-            command,
-            'user',
-            true
-          );
-
-          addNote(text);
-
-          addMessage(
-            `📝 Note saved: ${text}`,
-            'assistant',
-            true
-          );
-
-          return;
-        }
-
-        if (
-          /^add task\s+/i.test(
-            command
-          )
-        ) {
-          const text =
-            command
-              .replace(
-                /^add task\s+/i,
-                ''
-              )
-              .trim();
-
-          addMessage(
-            command,
-            'user',
-            true
-          );
-
-          addTask(text);
-
-          addMessage(
-            `✅ Task added: ${text}`,
-            'assistant',
-            true
-          );
-
-          return;
-        }
-
-        sendToAI(command);
-      }
-    );
-  });
-
-/* =========================================================
-   NEW CHAT
-========================================================= */
-
-$('newChatBtn')?.addEventListener(
-  'click',
-  () => {
-
-    if (isThinking) return;
-
-    const confirmed =
-      confirm(
-        'Current conversation clear karke new chat start karni hai?'
-      );
-
-    if (!confirmed) return;
-
-    chatHistory = [];
-
-    saveJSON(
-      STORAGE.chat,
-      chatHistory
-    );
-
-    if (messagesEl) {
-      messagesEl.innerHTML = '';
-    }
-
-    showWelcomeMessage();
-
-    userInput?.focus();
-  }
-);
-
-/* =========================================================
-   NAVIGATION
-========================================================= */
-
-document
-  .querySelectorAll(
-    '.nav-item[data-view]'
-  )
-  .forEach((button) => {
-
-    button.addEventListener(
-      'click',
-      () => {
-        showView(
-          button.dataset.view
-        );
-      }
-    );
-  });
-
-/* =========================================================
-   NOTES FORM
-========================================================= */
-
-$('addNoteBtn')?.addEventListener(
-  'click',
-  () => {
-
-    $('noteForm')?.classList.toggle(
-      'hidden'
-    );
-
-    $('noteInput')?.focus();
-  }
-);
-
-$('saveNoteBtn')?.addEventListener(
-  'click',
-  () => {
-
-    const input =
-      $('noteInput');
-
-    const text =
-      input?.value.trim();
-
-    if (!text) return;
-
-    addNote(text);
-
-    input.value = '';
-
-    $('noteForm')?.classList.add(
-      'hidden'
-    );
-  }
-);
-
-/* =========================================================
-   TASK FORM
-========================================================= */
-
-$('addTaskBtn')?.addEventListener(
-  'click',
-  () => {
-
-    $('taskForm')?.classList.toggle(
-      'hidden'
-    );
-
-    $('taskInput')?.focus();
-  }
-);
-
-$('saveTaskBtn')?.addEventListener(
-  'click',
-  () => {
-
-    const input =
-      $('taskInput');
-
-    const text =
-      input?.value.trim();
-
-    if (!text) return;
-
-    addTask(text);
-
-    input.value = '';
-
-    $('taskForm')?.classList.add(
-      'hidden'
-    );
-  }
-);
-
-/* =========================================================
-   NOTE DELETE
-========================================================= */
-
-$('notesList')?.addEventListener(
-  'click',
-  (event) => {
-
-    const button =
-      event.target.closest(
-        '[data-delete-note]'
-      );
-
-    if (!button) return;
-
-    const id =
-      Number(
-        button.dataset.deleteNote
-      );
-
-    notes =
-      notes.filter(
-        (note) =>
-          note.id !== id
-      );
-
-    saveJSON(
-      STORAGE.notes,
-      notes
-    );
-
-    renderNotes();
-    updateCounts();
-  }
-);
-
-/* =========================================================
-   TASK ACTIONS
-========================================================= */
-
-$('tasksList')?.addEventListener(
-  'click',
-  (event) => {
-
-    const deleteButton =
-      event.target.closest(
-        '[data-delete-task]'
-      );
-
-    const toggleButton =
-      event.target.closest(
-        '[data-toggle-task]'
-      );
-
-    if (deleteButton) {
-
-      const id =
-        Number(
-          deleteButton.dataset
-            .deleteTask
-        );
-
-      tasks =
-        tasks.filter(
-          (task) =>
-            task.id !== id
-        );
-
-      saveJSON(
-        STORAGE.tasks,
-        tasks
-      );
-
-      renderTasks();
-      updateCounts();
-    }
-
-    if (toggleButton) {
-
-      const id =
-        Number(
-          toggleButton.dataset
-            .toggleTask
-        );
-
-      const task =
-        tasks.find(
-          (item) =>
-            item.id === id
-        );
-
-      if (task) {
-        task.done =
-          !task.done;
-      }
-
-      saveJSON(
-        STORAGE.tasks,
-        tasks
-      );
-
-      renderTasks();
-      updateCounts();
-    }
-  }
-);
-
-/* =========================================================
-   CLEAR LOCAL DATA
-========================================================= */
-
-$('clearDataBtn')?.addEventListener(
-  'click',
-  () => {
-
-    const confirmed =
-      confirm(
-        'Notes, tasks aur chat history permanently clear karni hai?'
-      );
-
-    if (!confirmed) return;
-
-    notes = [];
-    tasks = [];
-    chatHistory = [];
-
-    localStorage.removeItem(
-      STORAGE.notes
-    );
-
-    localStorage.removeItem(
-      STORAGE.tasks
-    );
-
-    localStorage.removeItem(
-      STORAGE.chat
-    );
-
-    if (messagesEl) {
-      messagesEl.innerHTML = '';
-    }
-
-    renderNotes();
-    renderTasks();
-    updateCounts();
-
-    showWelcomeMessage();
-  }
-);
-
-/* =========================================================
-   THEME
-========================================================= */
-
-function applyTheme() {
-  const theme =
-    localStorage.getItem(
-      STORAGE.theme
-    );
-
-  if (theme === 'light') {
-    document.body.classList.add(
-      'light'
-    );
-  } else {
-    document.body.classList.remove(
-      'light'
-    );
-  }
-}
-
-$('themeBtn')?.addEventListener(
-  'click',
-  () => {
-
-    const isLight =
-      document.body.classList.toggle(
-        'light'
-      );
-
-    localStorage.setItem(
-      STORAGE.theme,
-      isLight
-        ? 'light'
-        : 'dark'
-    );
-  }
-);
-
-/* =========================================================
-   MOBILE MENU
-========================================================= */
-
-$('mobileMenu')?.addEventListener(
-  'click',
-  () => {
-
-    $('sidebar')?.classList.toggle(
-      'open'
-    );
-  }
-);
-
-/* =========================================================
-   VOICE INPUT
-========================================================= */
-
-$('voiceBtn')?.addEventListener(
-  'click',
-  () => {
-
-    const SpeechRecognition =
-      window.SpeechRecognition ||
-      window.webkitSpeechRecognition;
-
-    if (!SpeechRecognition) {
-      alert(
-        'Voice input is not supported in this browser.'
-      );
-
-      return;
-    }
-
-    const recognition =
-      new SpeechRecognition();
-
-    recognition.lang =
-      'hi-IN';
-
-    recognition.interimResults =
-      false;
-
-    recognition.maxAlternatives =
-      1;
-
-    setStatus(
-      'LISTENING...'
-    );
-
-    aiOrb?.classList.add(
-      'ai-active'
-    );
-
-    recognition.onresult =
-      (event) => {
-
-        const transcript =
-          event
-            .results[0][0]
-            .transcript;
-
-        userInput.value =
-          transcript;
-
-        userInput.focus();
-      };
-
-    recognition.onerror =
-      (event) => {
-
-        console.error(
-          'Voice error:',
-          event.error
-        );
-
-        setStatus(
-          'AI ONLINE'
-        );
-
-        aiOrb?.classList.remove(
-          'ai-active'
-        );
-      };
-
-    recognition.onend =
-      () => {
-
-        setStatus(
-          'AI ONLINE'
-        );
-
-        aiOrb?.classList.remove(
-          'ai-active'
-        );
-      };
-
-    recognition.start();
-  }
-);
-
-/* =========================================================
-   CALCULATOR UI
-========================================================= */
-
-const calcDisplay =
-  $('calcDisplay');
-
-const calcGrid =
-  $('calcGrid');
-
-if (calcGrid && calcDisplay) {
-
-  calcGrid.addEventListener(
-    'click',
-    (event) => {
-
-      const button =
-        event.target.closest(
-          'button'
-        );
-
-      if (!button) return;
-
-      const value =
-        button.dataset.value;
-
-      if (!value) return;
-
-      if (value === 'C') {
-        calcDisplay.value = '';
-        return;
-      }
-
-      if (value === '⌫') {
-        calcDisplay.value =
-          calcDisplay.value.slice(
-            0,
-            -1
-          );
-
-        return;
-      }
-
-      if (value === '=') {
-
-        try {
-
-          const expression =
-            calcDisplay.value
-              .replace(
-                /×/g,
-                '*'
-              )
-              .replace(
-                /÷/g,
-                '/'
-              );
-
-          const result =
-            Function(
-              `"use strict"; return (${expression})`
-            )();
-
-          calcDisplay.value =
-            Number.isFinite(result)
-              ? result
-              : '';
-
-        } catch {
-
-          calcDisplay.value =
-            'Error';
-        }
-
-        return;
-      }
-
-      if (value === '%') {
-
-        try {
-
-          const current =
-            parseFloat(
-              calcDisplay.value
-            );
-
-          if (
-            Number.isFinite(
-              current
-            )
-          ) {
-            calcDisplay.value =
-              current / 100;
-          }
-
-        } catch {}
-
-        return;
-      }
-
-      calcDisplay.value +=
-        value;
-    }
-  );
-}
-
-/* =========================================================
-   CLOCK
-========================================================= */
-
-function updateClock() {
-
-  const clock =
-    $('clock');
-
-  if (!clock) return;
-
-  const now =
-    new Date();
-
-  clock.textContent =
-    now.toLocaleTimeString(
-      [],
-      {
-        hour:
-          '2-digit',
-
-        minute:
-          '2-digit'
-      }
-    );
-}
-
-setInterval(
-  updateClock,
-  1000
-);
-
-/* =========================================================
-   KEYBOARD SHORTCUTS
-========================================================= */
-
-document.addEventListener(
-  'keydown',
-  (event) => {
-
-    if (
-      event.key === '/' &&
-      document.activeElement !==
-        userInput
-    ) {
-
-      event.preventDefault();
-
-      userInput?.focus();
-    }
-
-    if (
-      event.key === 'Escape'
-    ) {
-
-      $('sidebar')?.classList.remove(
-        'open'
-      );
-    }
-  }
-);
-
-/* =========================================================
-   INITIALIZE
-========================================================= */
-
-applyTheme();
-
-updateClock();
-
-renderNotes();
-
-renderTasks();
-
-updateCounts();
-
-restoreChat();
-
-checkBackend();
-
-userInput?.focus();
-
-console.log(
-  '🚀 GAURAV AI initialized successfully.'
-);
+  .quick-card {
+    
