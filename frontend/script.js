@@ -1,1492 +1,1256 @@
-:root {
-  --bg: #070a14;
-  --bg-soft: #0c1120;
+/* =========================================================
+   GAURAV AI — FRONTEND
+   Works with the current index.html + style.css
+========================================================= */
 
-  --panel: rgba(15, 21, 40, 0.82);
-  --panel-strong: rgba(20, 27, 50, 0.95);
+const $ = (id) => document.getElementById(id);
 
-  --text: #f7f8ff;
-  --muted: #98a3c2;
+/* =========================================================
+   ELEMENTS
+========================================================= */
 
-  --line: rgba(255, 255, 255, 0.09);
+const messagesEl = $('messages');
+const composer = $('composer');
+const userInput = $('userInput');
+const statusText = $('statusText');
+const aiOrb = $('aiOrb');
 
-  --accent: #7657ff;
-  --accent-2: #00d9ff;
+/* =========================================================
+   STORAGE
+========================================================= */
 
-  --success: #55e6ad;
-  --danger: #ff5577;
+const STORAGE = {
+  notes: 'gaurav_notes',
+  tasks: 'gaurav_tasks',
+  theme: 'gaurav_theme'
+};
 
-  --shadow: 0 20px 70px rgba(0, 0, 0, 0.35);
+function loadJSON(key, fallback = []) {
+  try {
+    const value = localStorage.getItem(key);
 
-  --sidebar-width: 250px;
+    if (!value) return fallback;
+
+    const parsed = JSON.parse(value);
+
+    return Array.isArray(parsed)
+      ? parsed
+      : fallback;
+
+  } catch (error) {
+    console.error(`Storage error: ${key}`, error);
+    return fallback;
+  }
+}
+
+function saveJSON(key, value) {
+  try {
+    localStorage.setItem(
+      key,
+      JSON.stringify(value)
+    );
+  } catch (error) {
+    console.error(`Storage save error: ${key}`, error);
+  }
+}
+
+let chatHistory = [];
+
+let notes = loadJSON(
+  STORAGE.notes
+);
+
+let tasks = loadJSON(
+  STORAGE.tasks
+);
+
+/* =========================================================
+   GENERAL HELPERS
+========================================================= */
+
+function setStatus(text) {
+  if (statusText) {
+    statusText.textContent = text;
+  }
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+}
+
+function showToast(message) {
+  const toast = $('toast');
+
+  if (!toast) return;
+
+  toast.textContent = message;
+  toast.classList.add('show');
+
+  clearTimeout(
+    showToast.timer
+  );
+
+  showToast.timer = setTimeout(() => {
+    toast.classList.remove('show');
+  }, 2500);
 }
 
 /* =========================================================
-   RESET
+   MESSAGES
 ========================================================= */
 
-* {
-  box-sizing: border-box;
-}
+function addMessage(
+  text,
+  role = 'assistant'
+) {
+  if (!messagesEl) return null;
 
-html {
-  margin: 0;
-  padding: 0;
-  min-height: 100%;
-}
+  const item =
+    document.createElement('div');
 
-body {
-  margin: 0;
-  min-height: 100vh;
+  item.className =
+    `message ${role}`;
 
-  font-family:
-    Inter,
-    system-ui,
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    sans-serif;
+  const bubble =
+    document.createElement('div');
 
-  background: var(--bg);
-  color: var(--text);
+  bubble.className = 'bubble';
 
-  overflow-x: hidden;
-}
+  bubble.textContent =
+    String(text);
 
-button,
-input {
-  font: inherit;
-}
+  item.appendChild(bubble);
 
-button {
-  cursor: pointer;
-}
+  messagesEl.appendChild(item);
 
-.hidden {
-  display: none !important;
+  requestAnimationFrame(() => {
+    messagesEl.scrollTop =
+      messagesEl.scrollHeight;
+  });
+
+  return item;
 }
 
 /* =========================================================
-   BACKGROUND
+   AI ORB
 ========================================================= */
 
-body::before {
-  content: "";
+function setAIThinking(active) {
+  if (!aiOrb) return;
 
-  position: fixed;
-  inset: 0;
+  aiOrb.classList.toggle(
+    'ai-active',
+    active
+  );
+}
 
-  pointer-events: none;
+/* =========================================================
+   SEND MESSAGE TO AI
+========================================================= */
 
-  background:
-    radial-gradient(
-      circle at 10% 10%,
-      rgba(118, 87, 255, 0.14),
-      transparent 30%
-    ),
-    radial-gradient(
-      circle at 90% 90%,
-      rgba(0, 217, 255, 0.09),
-      transparent 30%
+async function sendToAI(text) {
+
+  const message =
+    String(text || '').trim();
+
+  if (!message) return;
+
+  if (!userInput) return;
+
+  addMessage(
+    message,
+    'user'
+  );
+
+  userInput.value = '';
+
+  const thinking =
+    addMessage(
+      'Thinking... 🤖',
+      'assistant'
     );
 
-  z-index: -3;
-}
+  setAIThinking(true);
+  setStatus('THINKING...');
 
-.bg-orb {
-  position: fixed;
+  chatHistory.push({
+    role: 'user',
+    content: message
+  });
 
-  width: 380px;
-  height: 380px;
+  /*
+   * Keep only last 12 messages.
+   */
+  const messages =
+    chatHistory.slice(-12);
 
-  border-radius: 50%;
+  try {
 
-  filter: blur(100px);
+    /*
+     * IMPORTANT:
+     * Frontend and backend should normally
+     * be on the same Render server.
+     */
+    const response =
+      await fetch(
+        '/api/chat',
+        {
+          method: 'POST',
 
-  opacity: 0.13;
+          headers: {
+            'Content-Type':
+              'application/json',
+            'Accept':
+              'application/json'
+          },
 
-  pointer-events: none;
+          body: JSON.stringify({
+            messages
+          })
+        }
+      );
 
-  z-index: -2;
-}
+    /*
+     * Read as TEXT first.
+     *
+     * This prevents:
+     *
+     * Unexpected token 'F',
+     * "File not found!"
+     *
+     * from crashing JSON parsing.
+     */
+    const raw =
+      await response.text();
 
-.orb-1 {
-  top: -170px;
-  left: -160px;
-  background: #704cff;
-}
-
-.orb-2 {
-  right: -180px;
-  bottom: -190px;
-  background: #00cfff;
-}
-
-/* =========================================================
-   APP
-========================================================= */
-
-.app-shell {
-  min-height: 100vh;
-
-  display: flex;
-
-  position: relative;
-}
-
-/* =========================================================
-   SIDEBAR
-========================================================= */
-
-.sidebar {
-  width: var(--sidebar-width);
-
-  min-width: var(--sidebar-width);
-
-  min-height: 100vh;
-
-  padding: 22px 14px;
-
-  border-right: 1px solid var(--line);
-
-  background:
-    rgba(5, 8, 20, 0.82);
-
-  backdrop-filter: blur(25px);
-
-  display: flex;
-  flex-direction: column;
-
-  gap: 20px;
-
-  z-index: 100;
-}
-
-.brand {
-  display: flex;
-
-  align-items: center;
-
-  gap: 10px;
-
-  padding: 4px 8px;
-}
-
-.brand-orb {
-  width: 42px;
-  height: 42px;
-
-  flex-shrink: 0;
-
-  border-radius: 13px;
-
-  display: grid;
-  place-items: center;
-
-  background:
-    linear-gradient(
-      135deg,
-      var(--accent),
-      var(--accent-2)
+    console.log(
+      'Gaurav AI API status:',
+      response.status
     );
 
-  box-shadow:
-    0 0 25px rgba(118, 87, 255, 0.4),
-    0 0 50px rgba(0, 217, 255, 0.1);
-
-  font-size: 20px;
-
-  animation: brandGlow 3s infinite ease-in-out;
-}
-
-@keyframes brandGlow {
-  50% {
-    transform: scale(1.04) rotate(3deg);
-
-    box-shadow:
-      0 0 38px rgba(118, 87, 255, 0.6),
-      0 0 65px rgba(0, 217, 255, 0.15);
-  }
-}
-
-.brand strong,
-.brand span {
-  display: block;
-}
-
-.brand strong {
-  font-size: 13px;
-  letter-spacing: 1.7px;
-}
-
-.brand span {
-  margin-top: 4px;
-
-  color: var(--muted);
-
-  font-size: 10px;
-}
-
-/* =========================================================
-   BUTTONS
-========================================================= */
-
-.new-chat,
-.nav-item,
-.primary-btn,
-.quick-card,
-.icon-btn,
-.send-btn,
-.calc-grid button {
-  border: 0;
-
-  color: inherit;
-
-  background: transparent;
-}
-
-/* =========================================================
-   NEW CHAT
-========================================================= */
-
-.new-chat {
-  width: 100%;
-
-  padding: 13px 14px;
-
-  border: 1px solid var(--line);
-
-  border-radius: 14px;
-
-  background:
-    linear-gradient(
-      135deg,
-      rgba(118, 87, 255, 0.2),
-      rgba(0, 217, 255, 0.06)
+    console.log(
+      'Gaurav AI raw response:',
+      raw
     );
 
-  text-align: left;
-
-  transition: 0.2s;
-}
-
-.new-chat:hover {
-  transform: translateY(-2px);
-
-  border-color:
-    rgba(118, 87, 255, 0.5);
-}
-
-/* =========================================================
-   NAV
-========================================================= */
-
-.nav-item {
-  width: 100%;
-
-  padding: 11px 12px;
-
-  margin: 3px 0;
-
-  border-radius: 11px;
-
-  color: var(--muted);
-
-  display: flex;
-
-  align-items: center;
-
-  gap: 10px;
-
-  text-align: left;
-
-  transition: 0.2s;
-}
-
-.nav-item:hover,
-.nav-item.active {
-  color: var(--text);
-
-  background:
-    rgba(255, 255, 255, 0.07);
-}
-
-.nav-item.active {
-  box-shadow:
-    inset 2px 0 0 var(--accent-2);
-}
-
-.nav-item b {
-  margin-left: auto;
-
-  padding: 3px 7px;
-
-  border-radius: 10px;
-
-  font-size: 10px;
-
-  background:
-    rgba(255, 255, 255, 0.08);
-}
-
-.sidebar-bottom {
-  margin-top: auto;
-}
-
-/* =========================================================
-   MAIN PANEL
-========================================================= */
-
-.main-panel {
-  flex: 1;
-
-  min-width: 0;
-
-  min-height: 100vh;
-
-  display: flex;
-
-  flex-direction: column;
-
-  position: relative;
-}
-
-/* =========================================================
-   TOPBAR
-========================================================= */
-
-.topbar {
-  height: 82px;
-
-  flex-shrink: 0;
-
-  padding: 16px 30px;
-
-  border-bottom: 1px solid var(--line);
-
-  background:
-    rgba(7, 11, 24, 0.42);
-
-  backdrop-filter: blur(18px);
-
-  display: flex;
-
-  align-items: center;
-
-  justify-content: space-between;
-
-  gap: 15px;
-
-  position: sticky;
-
-  top: 0;
-
-  z-index: 50;
-}
-
-.eyebrow {
-  font-size: 10px;
-
-  letter-spacing: 1.5px;
-
-  color: #8490b1;
-
-  font-weight: 700;
-}
-
-.eyebrow span {
-  color: var(--success);
-}
-
-.topbar h1 {
-  margin: 6px 0 0;
-
-  font-size: 20px;
-
-  line-height: 1.2;
-}
-
-.clock {
-  color: var(--muted);
-
-  font-size: 13px;
-
-  font-variant-numeric: tabular-nums;
-
-  white-space: nowrap;
-}
-
-.mobile-menu {
-  display: none;
-
-  border: 0;
-
-  background: transparent;
-
-  color: var(--text);
-
-  font-size: 23px;
-
-  padding: 5px;
-}
-
-/* =========================================================
-   CONTENT
-========================================================= */
-
-.content {
-  width: min(980px, calc(100% - 48px));
-
-  margin: 0 auto;
-
-  flex: 1;
-
-  padding: 28px 0 125px;
-}
-
-.view {
-  width: 100%;
-}
-
-/* =========================================================
-   HERO
-========================================================= */
-
-.hero {
-  text-align: center;
-
-  padding:
-    8px 0 25px;
-}
-
-.ai-orb {
-  width: 118px;
-  height: 118px;
-
-  margin: 0 auto 18px;
-
-  border-radius: 50%;
-
-  display: grid;
-
-  place-items: center;
-
-  background:
-    radial-gradient(
-      circle at 35% 30%,
-      #eeeaff 0 4%,
-      #8063ff 13%,
-      #34277e 43%,
-      #11162e 70%
+    if (thinking) {
+      thinking.remove();
+    }
+
+    let data;
+
+    try {
+
+      data =
+        JSON.parse(raw);
+
+    } catch (parseError) {
+
+      throw new Error(
+        `Server ne JSON response nahi diya.\n` +
+        `Status: ${response.status}\n` +
+        `Response: ${raw.slice(0, 300)}`
+      );
+    }
+
+    if (!response.ok) {
+
+      throw new Error(
+        data?.error ||
+        `Server error ${response.status}`
+      );
+    }
+
+    const reply =
+      String(
+        data?.reply ||
+        'Mujhe abhi response nahi mila.'
+      ).trim();
+
+    if (!reply) {
+
+      throw new Error(
+        'AI ne empty response diya.'
+      );
+    }
+
+    chatHistory.push({
+      role: 'assistant',
+      content: reply
+    });
+
+    addMessage(
+      reply,
+      'assistant'
     );
 
-  box-shadow:
-    0 0 40px rgba(118, 87, 255, 0.42),
-    0 0 85px rgba(0, 217, 255, 0.1),
-    inset 0 0 28px rgba(0, 217, 255, 0.16);
+    setStatus('AI ONLINE');
 
-  animation: orbFloat 4s ease-in-out infinite;
+    setAIThinking(false);
 
-  transition: 0.3s;
-}
-
-.orb-core {
-  width: 56px;
-  height: 56px;
-
-  border-radius: 50%;
-
-  display: grid;
-  place-items: center;
-
-  background:
-    rgba(255, 255, 255, 0.08);
-
-  border:
-    1px solid rgba(255, 255, 255, 0.22);
-
-  font-size: 24px;
-
-  box-shadow:
-    0 0 22px rgba(0, 217, 255, 0.25);
-}
-
-@keyframes orbFloat {
-  50% {
-    transform: translateY(-7px);
-
-    box-shadow:
-      0 0 65px rgba(118, 87, 255, 0.58),
-      0 0 100px rgba(0, 217, 255, 0.12),
-      inset 0 0 35px rgba(0, 217, 255, 0.2);
-  }
-}
-
-.ai-orb.ai-active {
-  animation:
-    aiThinkingPulse 1.3s infinite ease-in-out;
-}
-
-@keyframes aiThinkingPulse {
-  0%,
-  100% {
-    transform: scale(1);
-  }
-
-  50% {
-    transform: scale(1.08);
-
-    box-shadow:
-      0 0 80px rgba(118, 87, 255, 0.75),
-      0 0 120px rgba(0, 217, 255, 0.2);
-  }
-}
-
-.hello {
-  margin: 0 0 5px;
-
-  color: #a8b2d1;
-}
-
-.hero h2 {
-  margin: 0 0 8px;
-
-  font-size: 31px;
-
-  line-height: 1.2;
-}
-
-.muted {
-  margin: 0;
-
-  color: var(--muted);
-}
-
-/* =========================================================
-   QUICK ACTIONS
-========================================================= */
-
-.quick-grid {
-  display: grid;
-
-  grid-template-columns:
-    repeat(4, 1fr);
-
-  gap: 12px;
-}
-
-.quick-card {
-  min-height: 110px;
-
-  padding: 16px;
-
-  border:
-    1px solid var(--line);
-
-  border-radius: 17px;
-
-  background:
-    var(--panel);
-
-  box-shadow:
-    var(--shadow);
-
-  text-align: left;
-
-  transition:
-    transform 0.2s,
-    border-color 0.2s,
-    background 0.2s;
-}
-
-.quick-card:hover {
-  transform: translateY(-4px);
-
-  border-color:
-    rgba(118, 87, 255, 0.55);
-
-  background:
-    rgba(25, 31, 62, 0.92);
-}
-
-.quick-card span,
-.quick-card small {
-  display: block;
-}
-
-.quick-card span {
-  margin-top: 10px;
-
-  font-size: 13px;
-
-  font-weight: 700;
-}
-
-.quick-card small {
-  margin-top: 4px;
-
-  color: var(--muted);
-
-  font-size: 10px;
-}
-
-/* =========================================================
-   CHAT MESSAGES
-========================================================= */
-
-.messages {
-  display: flex;
-
-  flex-direction: column;
-
-  gap: 13px;
-
-  margin-top: 25px;
-
-  scroll-behavior: smooth;
-}
-
-.message {
-  max-width: 78%;
-
-  font-size: 13px;
-
-  line-height: 1.6;
-
-  white-space: pre-wrap;
-
-  word-break: break-word;
-}
-
-.message .bubble {
-  padding: 13px 16px;
-
-  border-radius: 17px;
-
-  animation:
-    messageIn 0.3s ease-out;
-}
-
-.message.assistant {
-  align-self: flex-start;
-}
-
-.message.assistant .bubble {
-  background:
-    linear-gradient(
-      145deg,
-      rgba(24, 31, 62, 0.94),
-      rgba(15, 20, 42, 0.9)
+    console.log(
+      'AI provider:',
+      data?.provider || 'unknown'
     );
 
-  border:
-    1px solid var(--line);
+  } catch (error) {
 
-  box-shadow:
-    0 10px 30px rgba(0, 0, 0, 0.15);
-}
-
-.message.user {
-  align-self: flex-end;
-}
-
-.message.user .bubble {
-  background:
-    linear-gradient(
-      135deg,
-      #6750df,
-      #3988c8
+    console.error(
+      'Gaurav AI Chat Error:',
+      error
     );
 
-  box-shadow:
-    0 12px 35px rgba(65, 76, 190, 0.24);
-}
+    if (thinking) {
+      thinking.remove();
+    }
 
-@keyframes messageIn {
-  from {
-    opacity: 0;
+    setAIThinking(false);
 
-    transform:
-      translateY(8px)
-      scale(0.98);
-  }
+    setStatus('AI ONLINE');
 
-  to {
-    opacity: 1;
-
-    transform:
-      translateY(0)
-      scale(1);
-  }
-}
-
-/* =========================================================
-   THINKING
-========================================================= */
-
-.ai-thinking {
-  display: inline-flex;
-
-  align-items: center;
-
-  gap: 6px;
-}
-
-.ai-thinking span {
-  width: 6px;
-  height: 6px;
-
-  border-radius: 50%;
-
-  background:
-    var(--accent-2);
-
-  animation:
-    thinkingDot 1.15s infinite ease-in-out;
-}
-
-.ai-thinking span:nth-child(2) {
-  animation-delay: 0.15s;
-}
-
-.ai-thinking span:nth-child(3) {
-  animation-delay: 0.3s;
-}
-
-@keyframes thinkingDot {
-  0%,
-  60%,
-  100% {
-    transform: translateY(0);
-    opacity: 0.35;
-  }
-
-  30% {
-    transform: translateY(-5px);
-    opacity: 1;
-  }
-}
-
-/* =========================================================
-   SECTION HEAD
-========================================================= */
-
-.section-head {
-  display: flex;
-
-  align-items: center;
-
-  justify-content: space-between;
-
-  gap: 15px;
-
-  margin-bottom: 20px;
-}
-
-.section-head h2 {
-  margin: 6px 0 0;
-
-  font-size: 28px;
-}
-
-.primary-btn {
-  border: 0;
-
-  padding: 11px 15px;
-
-  border-radius: 12px;
-
-  background:
-    linear-gradient(
-      135deg,
-      var(--accent),
-      #4d8cff
+    addMessage(
+      `⚠️ AI connection error:\n${error.message}`,
+      'assistant'
     );
 
-  color: white;
-
-  font-weight: 700;
-
-  font-size: 12px;
-
-  transition: 0.2s;
-}
-
-.primary-btn:hover {
-  transform: translateY(-2px);
-
-  box-shadow:
-    0 10px 25px
-    rgba(118, 87, 255, 0.25);
-}
-
-/* =========================================================
-   FORMS
-========================================================= */
-
-.note-form,
-.task-form {
-  display: flex;
-
-  gap: 10px;
-
-  margin-bottom: 16px;
-}
-
-.note-form input,
-.task-form input {
-  flex: 1;
-}
-
-.note-form input,
-.task-form input,
-.composer input,
-.calculator input {
-  min-width: 0;
-
-  color: var(--text);
-
-  background:
-    rgba(255, 255, 255, 0.055);
-
-  border:
-    1px solid var(--line);
-
-  outline: none;
-
-  border-radius: 13px;
-
-  padding: 13px 14px;
-}
-
-.note-form input:focus,
-.task-form input:focus,
-.composer input:focus,
-.calculator input:focus {
-  border-color:
-    rgba(118, 87, 255, 0.7);
-}
-
-/* =========================================================
-   DATA CARDS
-========================================================= */
-
-.cards-list {
-  display: grid;
-
-  gap: 10px;
-}
-
-.data-card,
-.card {
-  padding: 15px 16px;
-
-  background:
-    var(--panel);
-
-  border:
-    1px solid var(--line);
-
-  border-radius: 15px;
-
-  display: flex;
-
-  gap: 12px;
-
-  align-items: center;
-}
-
-.data-card .body,
-.card > div:first-child {
-  flex: 1;
-
-  min-width: 0;
-}
-
-.data-card p,
-.card p {
-  margin: 5px 0 0;
-
-  font-size: 13px;
-
-  line-height: 1.45;
-
-  word-break: break-word;
-}
-
-.data-card small,
-.card small {
-  display: block;
-
-  margin-top: 5px;
-
-  color: var(--muted);
-
-  font-size: 10px;
-}
-
-.card button {
-  border: 1px solid var(--line);
-
-  border-radius: 9px;
-
-  padding: 7px 10px;
-
-  background:
-    rgba(255, 255, 255, 0.05);
-
-  color: var(--text);
-
-  cursor: pointer;
-}
-
-.card button:hover {
-  background:
-    rgba(255, 255, 255, 0.1);
-}
-
-.card button.danger {
-  color: #ff829b;
-}
-
-.delete-btn {
-  border: 0;
-
-  background: transparent;
-
-  color: #8490b1;
-
-  cursor: pointer;
+  }
 }
 
 /* =========================================================
    CALCULATOR
 ========================================================= */
 
-.calculator {
-  width: min(390px, 100%);
+function calculate(expression) {
 
-  margin:
-    25px auto 0;
+  try {
 
-  padding: 18px;
+    const clean =
+      String(expression || '')
+        .replace(
+          /^calculator\s*/i,
+          ''
+        )
+        .replace(
+          /×/g,
+          '*'
+        )
+        .replace(
+          /÷/g,
+          '/'
+        )
+        .replace(
+          /%/g,
+          '/100'
+        )
+        .replace(
+          /[^0-9+\-*/(). ]/g,
+          ''
+        );
 
-  border:
-    1px solid var(--line);
+    if (!clean.trim()) {
 
-  border-radius: 22px;
+      return (
+        '🧮 Calculator mein expression do.\n' +
+        'Example: calculator 125*8'
+      );
+    }
 
-  background:
-    var(--panel);
+    /*
+     * Basic expression validation.
+     */
+    if (
+      /[+\-*/.]$/.test(
+        clean.trim()
+      )
+    ) {
+      return '❌ Expression incomplete hai.';
+    }
 
-  box-shadow:
-    var(--shadow);
-}
+    const result =
+      Function(
+        `"use strict"; return (${clean})`
+      )();
 
-.calculator input {
-  width: 100%;
+    if (
+      typeof result !== 'number' ||
+      !Number.isFinite(result)
+    ) {
+      return '❌ Calculation valid nahi hai.';
+    }
 
-  height: 72px;
+    return `🧮 Answer: ${result}`;
 
-  margin-bottom: 12px;
+  } catch (error) {
 
-  text-align: right;
-
-  font-size: 28px;
-}
-
-.calc-grid {
-  display: grid;
-
-  grid-template-columns:
-    repeat(4, 1fr);
-
-  gap: 8px;
-}
-
-.calc-grid button {
-  height: 56px;
-
-  border-radius: 13px;
-
-  background:
-    rgba(255, 255, 255, 0.065);
-
-  color: var(--text);
-
-  font-size: 16px;
-
-  transition: 0.15s;
-}
-
-.calc-grid button:hover {
-  transform: translateY(-1px);
-
-  background:
-    rgba(255, 255, 255, 0.12);
-}
-
-.calc-grid .operator {
-  color: #9bb0ff;
-}
-
-.calc-grid .equals {
-  background:
-    linear-gradient(
-      135deg,
-      var(--accent),
-      #478fff
+    console.error(
+      'Calculator error:',
+      error
     );
-}
 
-.calc-grid .danger {
-  color: #ff829b;
-}
-
-.calc-grid .wide {
-  grid-column: span 2;
+    return (
+      '❌ Calculation samajh nahi aayi.'
+    );
+  }
 }
 
 /* =========================================================
-   CHAT COMPOSER
+   NOTES
 ========================================================= */
 
-.composer {
-  position: fixed;
+function addNote(text) {
 
-  left:
-    calc(
-      var(--sidebar-width) +
-      (100% - var(--sidebar-width)) / 2
-    );
+  const clean =
+    String(text || '').trim();
 
-  bottom: 22px;
+  if (!clean) return;
 
-  transform:
-    translateX(-50%);
+  const note = {
+    id: Date.now(),
+    text: clean,
+    date: new Date().toLocaleString()
+  };
 
-  width:
-    min(
-      850px,
-      calc(100% - var(--sidebar-width) - 60px)
-    );
+  notes.unshift(note);
 
-  min-height: 60px;
+  saveJSON(
+    STORAGE.notes,
+    notes
+  );
 
-  display: flex;
-
-  align-items: center;
-
-  gap: 9px;
-
-  padding: 8px;
-
-  background:
-    rgba(12, 17, 35, 0.94);
-
-  border:
-    1px solid rgba(255, 255, 255, 0.13);
-
-  border-radius: 18px;
-
-  backdrop-filter: blur(20px);
-
-  box-shadow:
-    0 20px 55px rgba(0, 0, 0, 0.4);
-
-  z-index: 80;
-
-  transition: 0.2s;
+  renderNotes();
+  updateCounts();
 }
 
-.composer:focus-within {
-  transform:
-    translateX(-50%)
-    translateY(-2px);
+function renderNotes() {
 
-  border-color:
-    rgba(118, 87, 255, 0.45);
+  const list =
+    $('notesList');
 
-  box-shadow:
-    0 20px 65px rgba(0, 0, 0, 0.48),
-    0 0 35px rgba(118, 87, 255, 0.08);
-}
+  if (!list) return;
 
-.composer input {
-  flex: 1;
+  list.innerHTML = '';
 
-  border: 0;
+  if (!notes.length) {
 
-  background: transparent;
+    list.innerHTML =
+      '<p class="muted">No notes yet.</p>';
 
-  padding: 12px 4px;
-}
-
-.composer input::placeholder {
-  color: #737d9d;
-}
-
-.icon-btn,
-.send-btn {
-  width: 42px;
-  height: 42px;
-
-  flex-shrink: 0;
-
-  border-radius: 12px;
-
-  transition: 0.2s;
-}
-
-.icon-btn {
-  background:
-    rgba(255, 255, 255, 0.06);
-}
-
-.icon-btn:hover {
-  background:
-    rgba(255, 255, 255, 0.12);
-}
-
-.send-btn {
-  background:
-    linear-gradient(
-      135deg,
-      var(--accent),
-      #398dff
-    );
-}
-
-.send-btn:hover {
-  transform: scale(1.04);
-
-  box-shadow:
-    0 8px 25px
-    rgba(118, 87, 255, 0.35);
-}
-
-/* =========================================================
-   TIP
-========================================================= */
-
-.tip {
-  position: fixed;
-
-  bottom: 3px;
-
-  left:
-    calc(
-      var(--sidebar-width) +
-      (100% - var(--sidebar-width)) / 2
-    );
-
-  transform:
-    translateX(-50%);
-
-  margin: 0;
-
-  color: #6f7894;
-
-  font-size: 9px;
-
-  z-index: 81;
-}
-
-/* =========================================================
-   TOAST
-========================================================= */
-
-.toast {
-  position: fixed;
-
-  top: 20px;
-  right: 20px;
-
-  padding: 11px 14px;
-
-  border:
-    1px solid var(--line);
-
-  border-radius: 12px;
-
-  background:
-    #141b34;
-
-  font-size: 12px;
-
-  opacity: 0;
-
-  transform:
-    translateY(-8px);
-
-  transition: 0.25s;
-
-  z-index: 200;
-}
-
-.toast.show {
-  opacity: 1;
-
-  transform:
-    translateY(0);
-}
-
-/* =========================================================
-   LIGHT THEME
-========================================================= */
-
-body.light,
-body.light-theme {
-  --bg: #f4f6ff;
-
-  --panel:
-    rgba(255, 255, 255, 0.82);
-
-  --panel-strong: #ffffff;
-
-  --text: #14182b;
-
-  --muted: #68718a;
-
-  --line:
-    rgba(20, 30, 60, 0.1);
-}
-
-body.light .sidebar,
-body.light-theme .sidebar {
-  background:
-    rgba(255, 255, 255, 0.8);
-}
-
-body.light .topbar,
-body.light-theme .topbar {
-  background:
-    rgba(255, 255, 255, 0.55);
-}
-
-body.light .composer,
-body.light-theme .composer {
-  background:
-    rgba(255, 255, 255, 0.94);
-}
-
-body.light .calc-grid button,
-body.light-theme .calc-grid button {
-  background:
-    rgba(20, 30, 60, 0.05);
-}
-
-body.light .message.assistant .bubble,
-body.light-theme .message.assistant .bubble {
-  background: #ffffff;
-}
-
-/* =========================================================
-   TABLET
-========================================================= */
-
-@media (max-width: 900px) {
-
-  :root {
-    --sidebar-width: 235px;
+    return;
   }
 
-  .content {
-    width:
-      min(
-        100% - 36px,
-        760px
+  notes.forEach((note) => {
+
+    const card =
+      document.createElement('div');
+
+    card.className = 'card';
+
+    card.innerHTML = `
+      <div>
+        <strong>📝 Note</strong>
+
+        <p>
+          ${escapeHtml(note.text)}
+        </p>
+
+        <small>
+          ${escapeHtml(note.date)}
+        </small>
+      </div>
+
+      <button
+        class="danger"
+        data-delete-note="${note.id}"
+      >
+        Delete
+      </button>
+    `;
+
+    list.appendChild(card);
+  });
+}
+
+/* =========================================================
+   TASKS
+========================================================= */
+
+function addTask(text) {
+
+  const clean =
+    String(text || '').trim();
+
+  if (!clean) return;
+
+  const task = {
+    id: Date.now(),
+    text: clean,
+    done: false,
+    date: new Date().toLocaleString()
+  };
+
+  tasks.unshift(task);
+
+  saveJSON(
+    STORAGE.tasks,
+    tasks
+  );
+
+  renderTasks();
+  updateCounts();
+}
+
+function renderTasks() {
+
+  const list =
+    $('tasksList');
+
+  if (!list) return;
+
+  list.innerHTML = '';
+
+  if (!tasks.length) {
+
+    list.innerHTML =
+      '<p class="muted">No tasks yet.</p>';
+
+    return;
+  }
+
+  tasks.forEach((task) => {
+
+    const card =
+      document.createElement('div');
+
+    card.className =
+      'card';
+
+    card.innerHTML = `
+      <div>
+        <strong>
+          ${task.done ? '✅' : '⬜'} Task
+        </strong>
+
+        <p>
+          ${escapeHtml(task.text)}
+        </p>
+
+        <small>
+          ${escapeHtml(task.date)}
+        </small>
+      </div>
+
+      <div>
+        <button
+          data-toggle-task="${task.id}"
+        >
+          ${task.done ? 'Undo' : 'Done'}
+        </button>
+
+        <button
+          class="danger"
+          data-delete-task="${task.id}"
+        >
+          Delete
+        </button>
+      </div>
+    `;
+
+    list.appendChild(card);
+  });
+}
+
+/* =========================================================
+   COUNTS
+========================================================= */
+
+function updateCounts() {
+
+  const noteCount =
+    $('noteCount');
+
+  const taskCount =
+    $('taskCount');
+
+  if (noteCount) {
+
+    noteCount.textContent =
+      notes.length;
+  }
+
+  if (taskCount) {
+
+    taskCount.textContent =
+      tasks.filter(
+        (task) => !task.done
+      ).length;
+  }
+}
+
+/* =========================================================
+   VIEW SWITCHING
+========================================================= */
+
+function showView(view) {
+
+  document
+    .querySelectorAll('.view')
+    .forEach((element) => {
+
+      element.classList.add(
+        'hidden'
+      );
+
+    });
+
+  const target =
+    $(`${view}View`);
+
+  if (target) {
+
+    target.classList.remove(
+      'hidden'
+    );
+  }
+
+  document
+    .querySelectorAll(
+      '.nav-item[data-view]'
+    )
+    .forEach((button) => {
+
+      button.classList.toggle(
+        'active',
+        button.dataset.view === view
+      );
+
+    });
+
+  const titles = {
+    chat:
+      'Gaurav AI Assistant',
+
+    notes:
+      'Your Notes',
+
+    tasks:
+      'Your Tasks',
+
+    calculator:
+      'Calculator'
+  };
+
+  const pageTitle =
+    $('pageTitle');
+
+  if (pageTitle) {
+
+    pageTitle.textContent =
+      titles[view] ||
+      'Gaurav AI Assistant';
+  }
+
+  /*
+   * Hide mobile sidebar after selecting a page.
+   */
+  if (window.innerWidth <= 820) {
+
+    $('sidebar')
+      ?.classList.remove(
+        'open'
       );
   }
 
-  .quick-grid {
-    grid-template-columns:
-      repeat(2, 1fr);
+  if (view === 'notes') {
+    renderNotes();
   }
 
-  .composer {
-    width:
-      min(
-        760px,
-        calc(100% - var(--sidebar-width) - 40px)
+  if (view === 'tasks') {
+    renderTasks();
+  }
+}
+
+/* =========================================================
+   BACKEND HEALTH
+========================================================= */
+
+async function checkBackend() {
+
+  try {
+
+    const response =
+      await fetch(
+        '/api/health',
+        {
+          method: 'GET',
+          headers: {
+            'Accept':
+              'application/json'
+          },
+          cache: 'no-store'
+        }
       );
+
+    const raw =
+      await response.text();
+
+    console.log(
+      'Backend health raw:',
+      raw
+    );
+
+    let data;
+
+    try {
+
+      data =
+        JSON.parse(raw);
+
+    } catch {
+
+      setStatus('OFFLINE');
+
+      return;
+    }
+
+    if (
+      response.ok &&
+      data?.ok &&
+      data?.aiConfigured
+    ) {
+
+      setStatus(
+        'AI ONLINE'
+      );
+
+    } else {
+
+      setStatus(
+        'AI OFFLINE'
+      );
+    }
+
+  } catch (error) {
+
+    console.error(
+      'Health check failed:',
+      error
+    );
+
+    setStatus(
+      'OFFLINE'
+    );
   }
 }
 
 /* =========================================================
-   MOBILE
+   COMPOSER
 ========================================================= */
 
-@media (max-width: 820px) {
+composer?.addEventListener(
+  'submit',
+  async (event) => {
 
-  .app-shell {
-    display: block;
+    event.preventDefault();
+
+    const text =
+      userInput?.value.trim();
+
+    if (!text) return;
+
+    /*
+     * Local calculator
+     */
+    if (
+      /^calculator\s+/i.test(text)
+    ) {
+
+      addMessage(
+        text,
+        'user'
+      );
+
+      userInput.value = '';
+
+      addMessage(
+        calculate(text),
+        'assistant'
+      );
+
+      return;
+    }
+
+    /*
+     * Local note
+     */
+    if (
+      /^note\s+/i.test(text)
+    ) {
+
+      const noteText =
+        text
+          .replace(
+            /^note\s+/i,
+            ''
+          )
+          .trim();
+
+      addMessage(
+        text,
+        'user'
+      );
+
+      userInput.value = '';
+
+      if (noteText) {
+
+        addNote(noteText);
+
+        addMessage(
+          `📝 Note saved: ${noteText}`,
+          'assistant'
+        );
+
+      }
+
+      return;
+    }
+
+    /*
+     * Local task
+     */
+    if (
+      /^add task\s+/i.test(text)
+    ) {
+
+      const taskText =
+        text
+          .replace(
+            /^add task\s+/i,
+            ''
+          )
+          .trim();
+
+      addMessage(
+        text,
+        'user'
+      );
+
+      userInput.value = '';
+
+      if (taskText) {
+
+        addTask(taskText);
+
+        addMessage(
+          `✅ Task added: ${taskText}`,
+          'assistant'
+        );
+      }
+
+      return;
+    }
+
+    /*
+     * Normal AI message
+     */
+    await sendToAI(text);
   }
-
-  .sidebar {
-    position: fixed;
-
-    top: 0;
-    left: -285px;
-    bottom: 0;
-
-    width: 270px;
-
-    min-width: 270px;
-
-    transition:
-      left 0.25s ease;
-
-    box-shadow:
-      20px 0 60px
-      rgba(0, 0, 0, 0.4);
-  }
-
-  .sidebar.open {
-    left: 0;
-  }
-
-  .main-panel {
-    width: 100%;
-
-    min-height: 100vh;
-  }
-
-  .mobile-menu {
-    display: block;
-  }
-
-  .topbar {
-    height: 72px;
-
-    padding:
-      14px 16px;
-  }
-
-  .topbar h1 {
-    font-size: 17px;
-  }
-
-  .clock {
-    font-size: 11px;
-  }
-
-  .content {
-    width:
-      calc(100% - 24px);
-
-    padding:
-      22px 0 105px;
-  }
-
-  .hero {
-    padding:
-      5px 0 22px;
-  }
-
-  .hero h2 {
-    font-size: 26px;
-  }
-
-  .ai-orb {
-    width: 96px;
-    height: 96px;
-  }
-
-  .orb-core {
-    width: 45px;
-    height: 45px;
-
-    font-size: 20px;
-  }
-
-  .quick-grid {
-    grid-template-columns:
-      repeat(2, minmax(0, 1fr));
-
-    gap: 8px;
-  }
-
-  .quick-card {
-    min-height: 100px;
-
-    padding: 13px;
-  }
-
-  .message {
-    max-width: 91%;
-  }
-
-  .composer {
-    left: 12px;
-    right: 12px;
-    bottom: 12px;
-
-    width: auto;
-
-    transform: none;
-
-    min-height: 56px;
-  }
-
-  .composer:focus-within {
-    transform:
-      translateY(-2px);
-  }
-
-  .tip {
-    display: none;
-  }
-
-  .section-head {
-    align-items: flex-start;
-  }
-
-  .section-head h2 {
-    font-size: 24px;
-  }
-
-  .calculator {
-    margin-top: 20px;
-  }
-}
+);
 
 /* =========================================================
-   SMALL PHONES
+   QUICK CARDS
 ========================================================= */
 
-@media (max-width: 460px) {
+document
+  .querySelectorAll('.quick-card')
+  .forEach((button) => {
 
-  .topbar {
-    padding:
-      13px 12px;
-  }
+    button.addEventListener(
+      'click',
+      async () => {
 
-  .topbar h1 {
-    font-size: 16px;
-  }
+        const command =
+          button.dataset.command ||
+          '';
 
-  .eyebrow {
-    font-size: 8px;
+        if (!command) return;
 
-    letter-spacing: 1.2px;
-  }
+        /*
+         * Calculator
+         */
+        if (
+          /^calculator\s+/i.test(
+            command
+          )
+        ) {
 
-  .clock {
-    font-size: 10px;
-  }
+          addMessage(
+            command,
+            'user'
+          );
 
-  .content {
-    width:
-      calc(100% - 18px);
+          addMessage(
+            calculate(command),
+            'assistant'
+          );
 
-    padding-top: 18px;
-  }
+          return;
+        }
 
-  .quick-grid {
-    grid-template-columns:
-      1fr 1fr;
-  }
+        /*
+         * Note
+         */
+        if (
+          /^note\s+/i.test(
+            command
+          )
+        ) {
 
-  .quick-card {
-    
+          const text =
+            command
+              .replace(
+                /^note\s+/i,
+                ''
+              )
+              .trim();
+
+          addMessage(
+            command,
+            'user'
+          );
+
+          addNote(text);
+
+          addMessage(
+            `📝 Note saved: ${text}`,
+            'assistant'
+          );
+
+          return;
+        }
+
+        /*
+         * Task
+         */
+        if (
+          /^add task\s+/i.test(
+            command
+          )
+        ) {
+
+          const text =
+            command
+              .replace(
+                /^add task\s+/i,
+                ''
+              )
+              .trim();
+
+          addMessage(
+            command,
+            'user'
+          );
+
+          addTask(text);
+
+          addMessage(
+            `✅ Task added: ${text}`,
+            'assistant'
+          );
+
+          return;
+        }
+
+        /*
+         * Normal AI
+         */
+        await sendToAI(command);
+      }
+    );
+  });
+
+/* =========================================================
+   NEW CHAT
+========================================================= */
+
+$('newChatBtn')
+  ?.addEventListener(
+    'click',
+    () => {
+
+      chatHistory = [];
+
+      if (messagesEl) {
+        messagesEl.innerHTML = '';
+      }
+
+      showView('chat');
+
+      addMessage(
+        'New conversation started. 👋 Bolo Gaurav, kya karna hai?',
+        'assistant'
+      );
+
+      userInput?.focus();
+    }
+  );
+
+/* =========================================================
+   NAVIGATION
+========================================================= */
+
+document
+  .querySelectorAll(
+    '.nav-item[data-view]'
+  )
+  .forEach((button) => {
+
+    button.addEventListener(
+      'click',
+      () => {
+
+        showView(
+          button.dataset.view
+        );
+      }
+    );
+  });
+
+/* =========================================================
+   NOTES UI
+========================================================= */
+
+$('addNoteBtn')
+  ?.addEventListener(
+    'click',
+    () => {
+
+      const form =
+        $('noteForm');
+
+      form?.classList.toggle(
+        'hidden'
+      );
+
+      $('noteInput')?.focus();
+    }
+  );
+
+$('saveNoteBtn')
+  ?.addEventListener(
+    'click',
+    () => {
+
+      const input =
+        $('noteInput');
+
+      const text =
+        input?.value.trim();
+
+      if (!text) return;
+
+      addNote(text);
+
+      input.value = '';
+
+      $('noteForm')
+        ?.classList.add(
+          'hidden'
+        );
+    }
+  );
+
+$('noteInput')
+  ?.addEventListener(
+    'keydown',
+    (event) => {
+
+      if (
+        event.key === 'Enter'
+      ) {
+
+        event.preventDefault();
+
+        $('saveNoteBtn')?.click();
+      }
+    }
+  );
+
+/* =========================================================
+   TASK UI
+========================================================= */
+
+$('addTaskBtn')
+  ?.addEventListener(
+    'click',
+    () => {
+
+      const form =
+        $('taskForm');
+
+      form?.classList.toggle(
+        'hidden'
+      );
+
+      $('taskInput')?.focus();
+    }
+  );
+
+$('saveTaskBtn')
+  ?.addEventListener(
+    'click',
+    () => {
+
+      const input =
+        $('taskInput');
+
+      const text =
+        input?.value.trim();
+
+      if (!text) return;
+
+      addTask(text);
+
+      input.value = '';
+
+      $('taskForm')
+        ?.classList.add(
+          'hidden'
+        );
+    }
+  );
+
+$('taskInput')
+  ?.addEventListener(
+    'keydown',
+    (event) => {
+
+      if (
+        event.key === 'Enter'
+      ) {
+
+        event.preventDefault();
+
+        $('saveTaskBtn')?.click();
+      }
+    }
+  );
+
+/* =========================================================
+   NOTE DELETE
+========================================================= */
+
+$('notesList')
+  ?.addEventListener(
+    'click',
+    (event) => {
+
+      const button =
+        event.target.closest(
+          '[data-delete-note]'
+        );
+
+      if (!button) return;
+
+      const id =
+        Number(
+          button.dataset.deleteNote
+        );
+
+      notes =
+        notes.filter(
+          (note) =>
+            note.id !== id
+        );
+
+      saveJSON(
+        STORAGE.notes,
+        notes
+      );
+
+      renderNotes();
+      updateCounts();
+
+      showToast(
+        'Note deleted 🗑️'
+      );
+    }
+  );
+
+/* =========================================================
+   TASK ACTIONS
+========================================================= */
+
+$('tasksList')
+  ?.addEventListener(
+    'click',
+    (event) => {
+
+      const deleteButton =
+        event.target.closest(
+          '[data-delete-task]'
+        );
+
+      const toggleButton =
+        event.target.closest(
+          '[data-toggle-task]'
+        );
+
+      /*
+       * Delete task
+       */
+      if (deleteButton) {
+
+        const id =
+          Number(
+            deleteButton.dataset
+              .deleteTask
+          );
+
+        tasks =
+          tasks.filter(
+            (task) =>
+              task.id !== id
+          );
+
+        saveJSON(
+          STORAGE.tasks,
+          tasks
+        );
+
+        renderTasks();
+        updateCounts();
+
+        showToast(
+          'Task deleted 🗑️'
+        );
+      }
+
+      /*
+       * Toggle task
+       */
+      if (toggleButton) {
+
+        const id =
+          Number(
+            toggleButton.dataset
+              .toggleTask
+          );
+
+        const task =
+          tasks.find(
+            (item) =>
+              item.id === id
+          );
+
+        if (task) {
+
+          task.done =
+            !task.done;
+
+        
