@@ -10,23 +10,19 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const port = Number(process.env.PORT || 3000);
 
-const model =
-  process.env.GEMINI_MODEL || 'gemini-3.6-flash';
+const model = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
+const timezone = process.env.TZ || 'Asia/Kolkata';
 
-const timezone =
-  process.env.TZ || 'Asia/Kolkata';
-
-const client = process.env.GEMINI_API_KEY
-  ? new GoogleGenAI({
-      apiKey: process.env.GEMINI_API_KEY
-    })
+const geminiClient = process.env.GEMINI_API_KEY
+  ? new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY })
   : null;
 
-app.use(
-  express.json({
-    limit: '64kb'
-  })
-);
+const openRouterKey = process.env.OPENROUTER_API_KEY || '';
+
+const OPENROUTER_MODEL =
+  process.env.OPENROUTER_MODEL || 'openrouter/free';
+
+app.use(express.json({ limit: '64kb' }));
 
 app.use(
   express.static(
@@ -59,6 +55,10 @@ function indiaDateTime() {
 // =====================================
 
 function cleanMessages(messages) {
+  if (!Array.isArray(messages)) {
+    return [];
+  }
+
   return messages
     .filter(
       (message) =>
@@ -80,92 +80,15 @@ function cleanMessages(messages) {
 
 
 // =====================================
-// HEALTH CHECK
+// SYSTEM PROMPT
 // =====================================
 
-app.get('/api/health', (_req, res) => {
-  res.json({
-    ok: true,
-    aiConfigured: Boolean(client),
-    model,
-    timezone,
-    indiaDateTime: indiaDateTime()
-  });
-});
-
-
-// =====================================
-// AI CHAT
-// =====================================
-
-app.post('/api/chat', async (req, res) => {
-
-  // API key check
-  if (!client) {
-    return res.status(503).json({
-      error:
-        'GEMINI_API_KEY is not configured on the server.'
-    });
-  }
-
-
-  // Clean messages
-  const safeMessages =
-    cleanMessages(
-      req.body?.messages
-    );
-
-
-  // Validate request
-  if (
-    !safeMessages.length ||
-    safeMessages.at(-1).role !== 'user'
-  ) {
-    return res.status(400).json({
-      error:
-        'A user message is required.'
-    });
-  }
-
-
-  try {
-
-    // Gemini conversation format
-    const contents =
-      safeMessages.map((message) => ({
-        role:
-          message.role === 'assistant'
-            ? 'model'
-            : 'user',
-
-        parts: [
-          {
-            text: message.content
-          }
-        ]
-      }));
-
-
-    // =================================
-    // GEMINI REQUEST
-    // =================================
-
-    const response =
-      await client.models.generateContent({
-
-        model,
-
-        contents,
-
-        config: {
-
-          systemInstruction: `
-
+function systemPrompt() {
+  return `
 You are Gaurav AI, a smart, friendly and practical personal AI assistant for Gaurav.
 
 Current India date and time:
 ${indiaDateTime()}
-
 
 IMPORTANT RULES:
 
@@ -183,7 +106,7 @@ IMPORTANT RULES:
 
 7. For date and time questions, use the current India date and time provided above.
 
-8. If the user asks:
+8. If the user asks about:
    - aaj
    - today
    - kal
@@ -195,7 +118,6 @@ IMPORTANT RULES:
    give the correct India date/time.
 
 9. Help with:
-
    - HTML
    - CSS
    - JavaScript
@@ -224,97 +146,259 @@ IMPORTANT RULES:
 15. Be friendly, practical and natural.
 
 16. Your name is Gaurav AI.
-
-        `
-        }
-      });
+`;
+}
 
 
-    // =================================
-    // GET AI REPLY
-    // =================================
+// =====================================
+// GEMINI CHAT
+// =====================================
 
-    const reply =
-      response?.text?.trim();
-
-
-    if (!reply) {
-
-      return res.status(502).json({
-        error:
-          'AI returned an empty response.'
-      });
-
-    }
-
-
-    // Server logs
-    console.log(
-      `[CHAT] ${safeMessages.at(-1).content}`
-    );
-
-    console.log(
-      `[AI] ${reply}`
-    );
-
-
-    // Send response
-    return res.json({
-      reply
-    });
-
-
-  } catch (error) {
-
-    console.error(
-      '[Gemini]',
-      error?.status || '',
-      error?.message || error
-    );
-
-
-    // =================================
-    // GEMINI QUOTA ERROR
-    // =================================
-
-    const errorStatus =
-      Number(error?.status);
-
-
-    if (errorStatus === 429) {
-
-      return res.status(429).json({
-
-        error:
-          'Gemini ka free quota abhi khatam hai. Thodi der baad dobara try karo.'
-
-      });
-
-    }
-
-
-    // =================================
-    // OTHER ERRORS
-    // =================================
-
-    const status =
-      Number.isInteger(errorStatus) &&
-      errorStatus >= 400 &&
-      errorStatus < 600
-
-        ? errorStatus
-
-        : 502;
-
-
-    return res.status(status).json({
-
-      error:
-        'Gemini request failed. API key, model, quota ya server logs check karo.'
-
-    });
-
+async function askGemini(safeMessages) {
+  if (!geminiClient) {
+    throw new Error('GEMINI_NOT_CONFIGURED');
   }
+
+  const contents = safeMessages.map((message) => ({
+    role: message.role === 'assistant'
+      ? 'model'
+      : 'user',
+
+    parts: [
+      {
+        text: message.content
+      }
+    ]
+  }));
+
+  const response =
+    await geminiClient.models.generateContent({
+      model,
+      contents,
+      config: {
+        systemInstruction: systemPrompt()
+      }
+    });
+
+  const reply = response?.text?.trim();
+
+  if (!reply) {
+    throw new Error('GEMINI_EMPTY_RESPONSE');
+  }
+
+  return reply;
+}
+
+
+// =====================================
+// OPENROUTER FALLBACK
+// =====================================
+
+async function askOpenRouter(safeMessages) {
+  if (!openRouterKey) {
+    throw new Error('OPENROUTER_NOT_CONFIGURED');
+  }
+
+  const messages = [
+    {
+      role: 'system',
+      content: systemPrompt()
+    },
+
+    ...safeMessages.map((message) => ({
+      role: message.role,
+      content: message.content
+    }))
+  ];
+
+  const response = await fetch(
+    'https://openrouter.ai/api/v1/chat/completions',
+    {
+      method: 'POST',
+
+      headers: {
+        'Authorization': `Bearer ${openRouterKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer':
+          'https://gaurav-ai-3vwp.onrender.com',
+        'X-Title': 'Gaurav AI'
+      },
+
+      body: JSON.stringify({
+        model: OPENROUTER_MODEL,
+        messages,
+        max_tokens: 1000
+      })
+    }
+  );
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    const error = new Error(
+      data?.error?.message ||
+      `OpenRouter request failed (${response.status})`
+    );
+
+    error.status = response.status;
+
+    throw error;
+  }
+
+  const reply =
+    data?.choices?.[0]?.message?.content?.trim();
+
+  if (!reply) {
+    throw new Error(
+      'OPENROUTER_EMPTY_RESPONSE'
+    );
+  }
+
+  return reply;
+}
+
+
+// =====================================
+// HEALTH CHECK
+// =====================================
+
+app.get('/api/health', (_req, res) => {
+  res.json({
+    ok: true,
+
+    aiConfigured: Boolean(
+      geminiClient || openRouterKey
+    ),
+
+    geminiConfigured:
+      Boolean(geminiClient),
+
+    openRouterConfigured:
+      Boolean(openRouterKey),
+
+    model,
+
+    openRouterModel:
+      OPENROUTER_MODEL,
+
+    timezone,
+
+    indiaDateTime:
+      indiaDateTime()
+  });
+});
+
+
+// =====================================
+// AI CHAT
+// =====================================
+
+app.post('/api/chat', async (req, res) => {
+
+  const safeMessages =
+    cleanMessages(
+      req.body?.messages
+    );
+
+  if (
+    !safeMessages.length ||
+    safeMessages.at(-1).role !== 'user'
+  ) {
+    return res.status(400).json({
+      error:
+        'A user message is required.'
+    });
+  }
+
+
+  // ===================================
+  // TRY GEMINI FIRST
+  // ===================================
+
+  if (geminiClient) {
+
+    try {
+
+      const reply =
+        await askGemini(
+          safeMessages
+        );
+
+      console.log(
+        `[GEMINI] ${safeMessages.at(-1).content}`
+      );
+
+      console.log(
+        `[AI] ${reply}`
+      );
+
+      return res.json({
+        reply,
+        provider: 'gemini'
+      });
+
+    } catch (error) {
+
+      console.error(
+        '[Gemini]',
+        error?.status || '',
+        error?.message || error
+      );
+
+      console.log(
+        '[FALLBACK] Gemini failed. Trying OpenRouter...'
+      );
+    }
+  }
+
+
+  // ===================================
+  // TRY OPENROUTER FALLBACK
+  // ===================================
+
+  if (openRouterKey) {
+
+    try {
+
+      const reply =
+        await askOpenRouter(
+          safeMessages
+        );
+
+      console.log(
+        `[OPENROUTER] ${safeMessages.at(-1).content}`
+      );
+
+      console.log(
+        `[AI] ${reply}`
+      );
+
+      return res.json({
+        reply,
+        provider: 'openrouter'
+      });
+
+    } catch (error) {
+
+      console.error(
+        '[OpenRouter]',
+        error?.status || '',
+        error?.message || error
+      );
+    }
+  }
+
+
+  // ===================================
+  // NO AI AVAILABLE
+  // ===================================
+
+  return res.status(503).json({
+
+    error:
+      'Gaurav AI abhi available nahi hai. Gemini quota/API aur OpenRouter backup check karo.'
+
+  });
 
 });
 
@@ -358,7 +442,27 @@ app.listen(port, () => {
   );
 
   console.log(
-    `Model: ${model}`
+    `Gemini Model: ${model}`
+  );
+
+  console.log(
+    `OpenRouter Model: ${OPENROUTER_MODEL}`
+  );
+
+  console.log(
+    `Gemini: ${
+      geminiClient
+        ? 'CONFIGURED'
+        : 'NOT CONFIGURED'
+    }`
+  );
+
+  console.log(
+    `OpenRouter: ${
+      openRouterKey
+        ? 'CONFIGURED'
+        : 'NOT CONFIGURED'
+    }`
   );
 
   console.log(
