@@ -1525,3 +1525,292 @@ input:focus-visible {
   }
 
  
+
+/* =========================================================
+
+/* =========================================================
+   TARGET MOBILE APP UI
+   ========================================================= */
+
+.mobile-bottom-nav {
+  display: none;
+}
+
+@media (max-width: 600px) {
+
+  html,
+  body {
+    width: 100%;
+    min-width: 100%;
+    min-height: 100%;
+    overflow-x: hidden;
+  }
+
+  body {
+    padding: 0;
+  }
+
+  .app-shell {
+    display: block;
+    width: 100%;
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+
+  .main-panel {
+    width: 100%;
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+
+  /* TOP HEADER */
+
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+
+    height: 72px;
+    padding: 10px 14px;
+
+    background:
+      rgba(6, 9, 20, .92);
+
+    backdrop-filter: blur(18px);
+
+    border-bottom:
+      1px solid rgba(255,255,255,.07);
+  }
+
+  .mobile-menu {
+    width: 44px;
+    height: 44px;
+    flex: 0 0 44px;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    border-radius: 14px;
+  }
+
+  .topbar-title {
+    min-width: 0;
+  }
+
+  .topbar-title h1 {
+    font-size: 17px;
+    line-height: 1.1;
+  }
+
+  .topbar-title .eyebrow {
+    font-size: 9px;
+  }
+
+  /* CHAT CONTENT */
+
+  .content {
+    width: 100%;
+    max-width: none;
+
+    padding:
+      14px
+      12px
+      190px;
+  }
+
+  .hero {
+    padding-top: 8px;
+  }
+
+  .hero h2 {
+    font-size: 23px;
+  }
+
+  /* CHAT MESSAGES */
+
+  .messages {
+    width: 100%;
+  }
+
+  .message {
+    max-width: 88%;
+    margin-bottom: 12px;
+  }
+
+  .message.user {
+    margin-left: auto;
+  }
+
+  .message.assistant {
+    margin-right: auto;
+  }
+
+  .message .bubble {
+    padding: 12px 14px;
+    border-radius: 17px;
+
+    font-size: 14px;
+    line-height: 1.55;
+  }
+
+  /* IMAGE INSIDE MESSAGE */
+
+  .message img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    border-radius: 13px;
+  }
+
+  /* COMPOSER */
+
+  .composer {
+    position: fixed;
+
+    left: 10px;
+    right: 10px;
+    bottom: 78px;
+
+    width: auto;
+    max-width: none;
+
+    z-index: 200;
+
+    transform: none !important;
+
+    padding: 8px;
+
+    border-radius: 20px;
+
+    background:
+      rgba(11, 16, 34, .94);
+
+    backdrop-filter: blur(20px);
+
+    border:
+      1px solid rgba(118,87,255,.35);
+
+    box-shadow:
+      0 15px 45px rgba(0,0,0,.35);
+  }
+
+  .composer input {
+    min-width: 0;
+    height: 44px;
+
+    font-size: 14px;
+  }
+
+  .icon-btn,
+  .send-btn {
+    width: 42px;
+    height: 42px;
+    flex: 0 0 42px;
+  }
+
+  /* IMAGE PREVIEW */
+
+  .image-preview {
+    max-width: 100%;
+    overflow: hidden;
+  }
+
+  .image-preview img {
+    max-width: 110px;
+    max-height: 75px;
+    border-radius: 12px;
+    object-fit: cover;
+  }
+
+  /* BOTTOM NAV */
+
+  .mobile-bottom-nav {
+    position: fixed;
+
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+
+    left: 10px;
+    right: 10px;
+    bottom: 10px;
+
+    height: 68px;
+
+    z-index: 300;
+
+    padding: 5px;
+
+    border-radius: 19px;
+
+    background:
+      rgba(10, 15, 31, .96);
+
+    backdrop-filter: blur(22px);
+
+    border:
+      1px solid rgba(255,255,255,.07);
+
+    box-shadow:
+      0 15px 40px rgba(0,0,0,.4);
+  }
+
+  .mobile-nav-item {
+    border: 0;
+    background: transparent;
+
+    color: #8992ad;
+
+    border-radius: 14px;
+
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+
+    gap: 3px;
+
+    font-family: inherit;
+  }
+
+  .mobile-nav-item span {
+    font-size: 19px;
+    line-height: 1;
+  }
+
+  .mobile-nav-item small {
+    font-size: 10px;
+  }
+
+  .mobile-nav-item.active {
+    color: #8b72ff;
+
+    background:
+      rgba(118,87,255,.12);
+  }
+
+  /* SIDEBAR */
+
+  .sidebar {
+    z-index: 500;
+  }
+
+  /* QUICK CARDS */
+
+  .quick-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .quick-card {
+    min-height: 72px;
+    padding: 11px;
+  }
+
+  /* NOTES / TASKS */
+
+  .section-head h2 {
+    font-size: 21px;
+  }
+
+}

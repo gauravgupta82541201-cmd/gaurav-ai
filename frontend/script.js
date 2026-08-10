@@ -712,7 +712,7 @@ function showView(view) {
 
   document
     .querySelectorAll(
-      '.nav-item[data-view]'
+      '.nav-item[data-view], .mobile-nav-item[data-view]'
     )
     .forEach((button) => {
       button.classList.toggle(
@@ -1043,26 +1043,22 @@ $('newChatBtn')?.addEventListener(
    NAVIGATION
 ========================================================= */
 
-document
-  .querySelectorAll(
-    '.nav-item[data-view]'
-  )
-  .forEach((button) => {
 
-    button.addEventListener(
-      'click',
-      () => {
-        showView(
-          button.dataset.view
-        );
-      }
-    );
-  });
 
-/* =========================================================
-   NOTES FORM
-========================================================= */
+function handleNavigationClick(event) {
+  const button = event.target.closest("[data-view]");
 
+  if (!button) return;
+
+  const view = button.dataset.view;
+
+  if (!view) return;
+
+  event.preventDefault();
+  showView(view);
+}
+
+document.addEventListener("click", handleNavigationClick);
 $('addNoteBtn')?.addEventListener(
   'click',
   () => {
