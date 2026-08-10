@@ -1,6 +1,6 @@
 /* =========================================================
-   GAURAV AI — FRONTEND
-   Works with the current index.html + style.css
+   GAURAV AI — PERSONAL ASSISTANT
+   Complete Frontend Controller
 ========================================================= */
 
 const $ = (id) => document.getElementById(id);
@@ -16,29 +16,43 @@ const statusText = $('statusText');
 const aiOrb = $('aiOrb');
 
 /* =========================================================
-   STORAGE
+   STORAGE KEYS
 ========================================================= */
 
 const STORAGE = {
+  chat: 'gaurav_chat_history',
   notes: 'gaurav_notes',
   tasks: 'gaurav_tasks',
   theme: 'gaurav_theme'
 };
 
-function loadJSON(key, fallback = []) {
+/* =========================================================
+   STATE
+========================================================= */
+
+let chatHistory = loadJSON(STORAGE.chat, []);
+let notes = loadJSON(STORAGE.notes, []);
+let tasks = loadJSON(STORAGE.tasks, []);
+
+let isThinking = false;
+
+/* =========================================================
+   STORAGE HELPERS
+========================================================= */
+
+function loadJSON(key, fallback) {
   try {
     const value = localStorage.getItem(key);
 
-    if (!value) return fallback;
+    if (!value) {
+      return fallback;
+    }
 
     const parsed = JSON.parse(value);
 
-    return Array.isArray(parsed)
-      ? parsed
-      : fallback;
-
+    return parsed;
   } catch (error) {
-    console.error(`Storage error: ${key}`, error);
+    console.error('Storage load error:', error);
     return fallback;
   }
 }
@@ -50,22 +64,18 @@ function saveJSON(key, value) {
       JSON.stringify(value)
     );
   } catch (error) {
-    console.error(`Storage save error: ${key}`, error);
+    console.error('Storage save error:', error);
   }
 }
 
-let chatHistory = [];
-
-let notes = loadJSON(
-  STORAGE.notes
-);
-
-let tasks = loadJSON(
-  STORAGE.tasks
-);
+function saveAllData() {
+  saveJSON(STORAGE.chat, chatHistory);
+  saveJSON(STORAGE.notes, notes);
+  saveJSON(STORAGE.tasks, tasks);
+}
 
 /* =========================================================
-   GENERAL HELPERS
+   STATUS
 ========================================================= */
 
 function setStatus(text) {
@@ -74,39 +84,110 @@ function setStatus(text) {
   }
 }
 
-function escapeHtml(value) {
-  return String(value)
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#039;');
-}
+function setThinking(active) {
+  isThinking = active;
 
-function showToast(message) {
-  const toast = $('toast');
+  if (active) {
+    setStatus('THINKING...');
 
-  if (!toast) return;
+    aiOrb?.classList.add('ai-active');
+  } else {
+    setStatus('AI ONLINE');
 
-  toast.textContent = message;
-  toast.classList.add('show');
-
-  clearTimeout(
-    showToast.timer
-  );
-
-  showToast.timer = setTimeout(() => {
-    toast.classList.remove('show');
-  }, 2500);
+    aiOrb?.classList.remove('ai-active');
+  }
 }
 
 /* =========================================================
-   MESSAGES
+   MESSAGE RENDERING
 ========================================================= */
 
 function addMessage(
   text,
-  role = 'assistant'
+  role = 'assistant',
+  save = false
+) {
+  if (!messagesEl) return null;
+
+  const item = document.createElement('div');
+
+  item.className = `message ${role}`;
+
+  const bubble = document.createElement('div');
+
+  bubble.className = 'bubble';
+
+  bubble.textContent = String(text);
+
+  item.appendChild(bubble);
+
+  messagesEl.appendChild(item);
+
+  messagesEl.scrollTop =
+    messagesEl.scrollHeight;
+
+  if (save) {
+    chatHistory.push({
+      role:
+        role === 'user'
+          ? 'user'
+          : 'assistant',
+      content: String(text)
+    });
+
+    saveJSON(
+      STORAGE.chat,
+      chatHistory
+    );
+  }
+
+  return item;
+}
+
+/* =========================================================
+   THINKING MESSAGE
+========================================================= */
+
+function addThinkingMessage() {
+  if (!messagesEl) return null;
+
+  const item = document.createElement('div');
+
+  item.className =
+    'message assistant';
+
+  const bubble =
+    document.createElement('div');
+
+  bubble.className = 'bubble';
+
+  bubble.innerHTML = `
+    <div class="ai-thinking">
+      <strong>Gaurav AI</strong>
+      <span></span>
+      <span></span>
+      <span></span>
+    </div>
+  `;
+
+  item.appendChild(bubble);
+
+  messagesEl.appendChild(item);
+
+  messagesEl.scrollTop =
+    messagesEl.scrollHeight;
+
+  return item;
+}
+
+/* =========================================================
+   TYPING EFFECT
+========================================================= */
+
+async function typeMessage(
+  text,
+  role = 'assistant',
+  save = true
 ) {
   if (!messagesEl) return null;
 
@@ -121,81 +202,137 @@ function addMessage(
 
   bubble.className = 'bubble';
 
-  bubble.textContent =
-    String(text);
-
   item.appendChild(bubble);
 
   messagesEl.appendChild(item);
 
-  requestAnimationFrame(() => {
+  const characters =
+    [...String(text)];
+
+  let current = '';
+
+  for (
+    let i = 0;
+    i < characters.length;
+    i++
+  ) {
+    current += characters[i];
+
+    bubble.textContent =
+      current;
+
     messagesEl.scrollTop =
       messagesEl.scrollHeight;
-  });
+
+    let delay = 8;
+
+    if (
+      characters[i] === '.' ||
+      characters[i] === '!' ||
+      characters[i] === '?'
+    ) {
+      delay = 35;
+    }
+
+    await wait(delay);
+  }
+
+  if (save) {
+    chatHistory.push({
+      role:
+        role === 'user'
+          ? 'user'
+          : 'assistant',
+      content: String(text)
+    });
+
+    saveJSON(
+      STORAGE.chat,
+      chatHistory
+    );
+  }
 
   return item;
 }
 
-/* =========================================================
-   AI ORB
-========================================================= */
-
-function setAIThinking(active) {
-  if (!aiOrb) return;
-
-  aiOrb.classList.toggle(
-    'ai-active',
-    active
+function wait(ms) {
+  return new Promise(
+    (resolve) =>
+      setTimeout(resolve, ms)
   );
 }
 
 /* =========================================================
-   SEND MESSAGE TO AI
+   RESTORE CHAT
+========================================================= */
+
+function restoreChat() {
+  if (!messagesEl) return;
+
+  messagesEl.innerHTML = '';
+
+  if (!chatHistory.length) {
+    showWelcomeMessage();
+    return;
+  }
+
+  chatHistory.forEach((message) => {
+    addMessage(
+      message.content,
+      message.role === 'user'
+        ? 'user'
+        : 'assistant',
+      false
+    );
+  });
+}
+
+function showWelcomeMessage() {
+  addMessage(
+    'Namaste Gaurav 👋',
+    'assistant',
+    false
+  );
+
+  addMessage(
+    'Main Gaurav AI hoon — tumhara personal AI assistant. 🤖',
+    'assistant',
+    false
+  );
+
+  addMessage(
+    'Tum mujhse normal chat, questions, calculations, notes aur tasks ke baare mein baat kar sakte ho.',
+    'assistant',
+    false
+  );
+}
+
+/* =========================================================
+   SEND MESSAGE TO BACKEND
 ========================================================= */
 
 async function sendToAI(text) {
-
-  const message =
+  const cleanText =
     String(text || '').trim();
 
-  if (!message) return;
-
-  if (!userInput) return;
+  if (!cleanText || isThinking) {
+    return;
+  }
 
   addMessage(
-    message,
-    'user'
+    cleanText,
+    'user',
+    true
   );
 
   userInput.value = '';
 
+  setThinking(true);
+
   const thinking =
-    addMessage(
-      'Thinking... 🤖',
-      'assistant'
-    );
-
-  setAIThinking(true);
-  setStatus('THINKING...');
-
-  chatHistory.push({
-    role: 'user',
-    content: message
-  });
-
-  /*
-   * Keep only last 12 messages.
-   */
-  const messages =
-    chatHistory.slice(-12);
+    addThinkingMessage();
 
   try {
-
-    /*
-     * IMPORTANT:
-     * Frontend and backend should normally
-     * be on the same Render server.
-     */
     const response =
       await fetch(
         '/api/chat',
@@ -204,120 +341,70 @@ async function sendToAI(text) {
 
           headers: {
             'Content-Type':
-              'application/json',
-            'Accept':
               'application/json'
           },
 
           body: JSON.stringify({
-            messages
+            messages:
+              chatHistory.slice(-12)
           })
         }
       );
 
-    /*
-     * Read as TEXT first.
-     *
-     * This prevents:
-     *
-     * Unexpected token 'F',
-     * "File not found!"
-     *
-     * from crashing JSON parsing.
-     */
-    const raw =
-      await response.text();
-
-    console.log(
-      'Gaurav AI API status:',
-      response.status
-    );
-
-    console.log(
-      'Gaurav AI raw response:',
-      raw
-    );
-
-    if (thinking) {
-      thinking.remove();
-    }
-
     let data;
 
     try {
-
       data =
-        JSON.parse(raw);
-
-    } catch (parseError) {
-
-      throw new Error(
-        `Server ne JSON response nahi diya.\n` +
-        `Status: ${response.status}\n` +
-        `Response: ${raw.slice(0, 300)}`
-      );
+        await response.json();
+    } catch {
+      data = {};
     }
 
-    if (!response.ok) {
+    console.log(
+      'Gaurav AI API:',
+      response.status,
+      data
+    );
 
+    thinking?.remove();
+
+    if (!response.ok) {
       throw new Error(
-        data?.error ||
+        data.error ||
         `Server error ${response.status}`
       );
     }
 
     const reply =
       String(
-        data?.reply ||
+        data.reply ||
+        data.message ||
         'Mujhe abhi response nahi mila.'
-      ).trim();
-
-    if (!reply) {
-
-      throw new Error(
-        'AI ne empty response diya.'
       );
-    }
 
-    chatHistory.push({
-      role: 'assistant',
-      content: reply
-    });
+    setThinking(false);
 
-    addMessage(
+    await typeMessage(
       reply,
-      'assistant'
-    );
-
-    setStatus('AI ONLINE');
-
-    setAIThinking(false);
-
-    console.log(
-      'AI provider:',
-      data?.provider || 'unknown'
+      'assistant',
+      true
     );
 
   } catch (error) {
-
     console.error(
       'Gaurav AI Chat Error:',
       error
     );
 
-    if (thinking) {
-      thinking.remove();
-    }
+    thinking?.remove();
 
-    setAIThinking(false);
+    setThinking(false);
 
-    setStatus('AI ONLINE');
-
-    addMessage(
-      `⚠️ AI connection error:\n${error.message}`,
-      'assistant'
+    await typeMessage(
+      `⚠️ Gaurav AI se connection mein problem aa gayi.\n\n${error.message}`,
+      'assistant',
+      true
     );
-
   }
 }
 
@@ -326,11 +413,9 @@ async function sendToAI(text) {
 ========================================================= */
 
 function calculate(expression) {
-
   try {
-
     const clean =
-      String(expression || '')
+      String(expression)
         .replace(
           /^calculator\s*/i,
           ''
@@ -344,31 +429,15 @@ function calculate(expression) {
           '/'
         )
         .replace(
-          /%/g,
-          '/100'
-        )
-        .replace(
-          /[^0-9+\-*/(). ]/g,
+          /[^0-9+\-*/().% ]/g,
           ''
         );
 
     if (!clean.trim()) {
-
       return (
-        '🧮 Calculator mein expression do.\n' +
-        'Example: calculator 125*8'
+        '🧮 Calculator mein expression do.\n\n' +
+        'Example:\ncalculator 125*8'
       );
-    }
-
-    /*
-     * Basic expression validation.
-     */
-    if (
-      /[+\-*/.]$/.test(
-        clean.trim()
-      )
-    ) {
-      return '❌ Expression incomplete hai.';
     }
 
     const result =
@@ -380,13 +449,12 @@ function calculate(expression) {
       typeof result !== 'number' ||
       !Number.isFinite(result)
     ) {
-      return '❌ Calculation valid nahi hai.';
+      return '❌ Invalid calculation.';
     }
 
     return `🧮 Answer: ${result}`;
 
   } catch (error) {
-
     console.error(
       'Calculator error:',
       error
@@ -399,11 +467,10 @@ function calculate(expression) {
 }
 
 /* =========================================================
-   NOTES
+   NOTE SYSTEM
 ========================================================= */
 
 function addNote(text) {
-
   const clean =
     String(text || '').trim();
 
@@ -412,7 +479,8 @@ function addNote(text) {
   const note = {
     id: Date.now(),
     text: clean,
-    date: new Date().toLocaleString()
+    date:
+      new Date().toLocaleString()
   };
 
   notes.unshift(note);
@@ -427,7 +495,6 @@ function addNote(text) {
 }
 
 function renderNotes() {
-
   const list =
     $('notesList');
 
@@ -436,7 +503,6 @@ function renderNotes() {
   list.innerHTML = '';
 
   if (!notes.length) {
-
     list.innerHTML =
       '<p class="muted">No notes yet.</p>';
 
@@ -444,30 +510,25 @@ function renderNotes() {
   }
 
   notes.forEach((note) => {
-
     const card =
       document.createElement('div');
 
-    card.className = 'card';
+    card.className =
+      'data-card';
 
     card.innerHTML = `
-      <div>
+      <div class="body">
         <strong>📝 Note</strong>
-
-        <p>
-          ${escapeHtml(note.text)}
-        </p>
-
-        <small>
-          ${escapeHtml(note.date)}
-        </small>
+        <p>${escapeHtml(note.text)}</p>
+        <small>${escapeHtml(note.date)}</small>
       </div>
 
       <button
-        class="danger"
+        class="delete-btn"
         data-delete-note="${note.id}"
+        title="Delete note"
       >
-        Delete
+        🗑️
       </button>
     `;
 
@@ -476,11 +537,10 @@ function renderNotes() {
 }
 
 /* =========================================================
-   TASKS
+   TASK SYSTEM
 ========================================================= */
 
 function addTask(text) {
-
   const clean =
     String(text || '').trim();
 
@@ -490,7 +550,8 @@ function addTask(text) {
     id: Date.now(),
     text: clean,
     done: false,
-    date: new Date().toLocaleString()
+    date:
+      new Date().toLocaleString()
   };
 
   tasks.unshift(task);
@@ -505,7 +566,6 @@ function addTask(text) {
 }
 
 function renderTasks() {
-
   const list =
     $('tasksList');
 
@@ -514,7 +574,6 @@ function renderTasks() {
   list.innerHTML = '';
 
   if (!tasks.length) {
-
     list.innerHTML =
       '<p class="muted">No tasks yet.</p>';
 
@@ -522,42 +581,42 @@ function renderTasks() {
   }
 
   tasks.forEach((task) => {
-
     const card =
       document.createElement('div');
 
     card.className =
-      'card';
+      `data-card task-card ${
+        task.done ? 'done' : ''
+      }`;
 
     card.innerHTML = `
-      <div>
+      <button
+        class="task-check"
+        data-toggle-task="${task.id}"
+        title="Mark task"
+      >
+        ${task.done ? '✓' : ''}
+      </button>
+
+      <div class="body">
         <strong>
           ${task.done ? '✅' : '⬜'} Task
         </strong>
 
-        <p>
-          ${escapeHtml(task.text)}
-        </p>
+        <p>${escapeHtml(task.text)}</p>
 
         <small>
           ${escapeHtml(task.date)}
         </small>
       </div>
 
-      <div>
-        <button
-          data-toggle-task="${task.id}"
-        >
-          ${task.done ? 'Undo' : 'Done'}
-        </button>
-
-        <button
-          class="danger"
-          data-delete-task="${task.id}"
-        >
-          Delete
-        </button>
-      </div>
+      <button
+        class="delete-btn"
+        data-delete-task="${task.id}"
+        title="Delete task"
+      >
+        🗑️
+      </button>
     `;
 
     list.appendChild(card);
@@ -565,11 +624,10 @@ function renderTasks() {
 }
 
 /* =========================================================
-   COUNTS
+   COUNTERS
 ========================================================= */
 
 function updateCounts() {
-
   const noteCount =
     $('noteCount');
 
@@ -577,13 +635,11 @@ function updateCounts() {
     $('taskCount');
 
   if (noteCount) {
-
     noteCount.textContent =
       notes.length;
   }
 
   if (taskCount) {
-
     taskCount.textContent =
       tasks.filter(
         (task) => !task.done
@@ -592,26 +648,48 @@ function updateCounts() {
 }
 
 /* =========================================================
-   VIEW SWITCHING
+   SAFE HTML
+========================================================= */
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll(
+      '&',
+      '&amp;'
+    )
+    .replaceAll(
+      '<',
+      '&lt;'
+    )
+    .replaceAll(
+      '>',
+      '&gt;'
+    )
+    .replaceAll(
+      '"',
+      '&quot;'
+    )
+    .replaceAll(
+      "'",
+      '&#039;'
+    );
+}
+
+/* =========================================================
+   VIEWS
 ========================================================= */
 
 function showView(view) {
-
   document
     .querySelectorAll('.view')
-    .forEach((element) => {
-
-      element.classList.add(
-        'hidden'
-      );
-
+    .forEach((el) => {
+      el.classList.add('hidden');
     });
 
   const target =
     $(`${view}View`);
 
   if (target) {
-
     target.classList.remove(
       'hidden'
     );
@@ -622,12 +700,10 @@ function showView(view) {
       '.nav-item[data-view]'
     )
     .forEach((button) => {
-
       button.classList.toggle(
         'active',
         button.dataset.view === view
       );
-
     });
 
   const titles = {
@@ -635,34 +711,19 @@ function showView(view) {
       'Gaurav AI Assistant',
 
     notes:
-      'Your Notes',
+      'Gaurav AI Notes',
 
     tasks:
-      'Your Tasks',
+      'Gaurav AI Tasks',
 
     calculator:
-      'Calculator'
+      'Gaurav AI Calculator'
   };
 
-  const pageTitle =
-    $('pageTitle');
-
-  if (pageTitle) {
-
-    pageTitle.textContent =
+  if ($('pageTitle')) {
+    $('pageTitle').textContent =
       titles[view] ||
       'Gaurav AI Assistant';
-  }
-
-  /*
-   * Hide mobile sidebar after selecting a page.
-   */
-  if (window.innerWidth <= 820) {
-
-    $('sidebar')
-      ?.classList.remove(
-        'open'
-      );
   }
 
   if (view === 'notes') {
@@ -672,6 +733,14 @@ function showView(view) {
   if (view === 'tasks') {
     renderTasks();
   }
+
+  if (
+    window.innerWidth <= 820
+  ) {
+    $('sidebar')?.classList.remove(
+      'open'
+    );
+  }
 }
 
 /* =========================================================
@@ -679,71 +748,40 @@ function showView(view) {
 ========================================================= */
 
 async function checkBackend() {
-
   try {
-
     const response =
       await fetch(
         '/api/health',
         {
-          method: 'GET',
-          headers: {
-            'Accept':
-              'application/json'
-          },
           cache: 'no-store'
         }
       );
 
-    const raw =
-      await response.text();
+    const data =
+      await response.json();
 
     console.log(
-      'Backend health raw:',
-      raw
+      'Gaurav AI Backend:',
+      data
     );
-
-    let data;
-
-    try {
-
-      data =
-        JSON.parse(raw);
-
-    } catch {
-
-      setStatus('OFFLINE');
-
-      return;
-    }
 
     if (
       response.ok &&
-      data?.ok &&
-      data?.aiConfigured
+      data.ok &&
+      data.aiConfigured
     ) {
-
-      setStatus(
-        'AI ONLINE'
-      );
-
+      setStatus('AI ONLINE');
     } else {
-
-      setStatus(
-        'AI OFFLINE'
-      );
+      setStatus('AI OFFLINE');
     }
 
   } catch (error) {
-
     console.error(
       'Health check failed:',
       error
     );
 
-    setStatus(
-      'OFFLINE'
-    );
+    setStatus('OFFLINE');
   }
 }
 
@@ -754,43 +792,38 @@ async function checkBackend() {
 composer?.addEventListener(
   'submit',
   async (event) => {
-
     event.preventDefault();
 
     const text =
-      userInput?.value.trim();
+      userInput.value.trim();
 
     if (!text) return;
 
-    /*
-     * Local calculator
-     */
+    /* Calculator */
     if (
       /^calculator\s+/i.test(text)
     ) {
-
       addMessage(
         text,
-        'user'
+        'user',
+        true
       );
 
       userInput.value = '';
 
       addMessage(
         calculate(text),
-        'assistant'
+        'assistant',
+        true
       );
 
       return;
     }
 
-    /*
-     * Local note
-     */
+    /* Note */
     if (
       /^note\s+/i.test(text)
     ) {
-
       const noteText =
         text
           .replace(
@@ -801,32 +834,29 @@ composer?.addEventListener(
 
       addMessage(
         text,
-        'user'
+        'user',
+        true
       );
 
       userInput.value = '';
 
       if (noteText) {
-
         addNote(noteText);
 
         addMessage(
           `📝 Note saved: ${noteText}`,
-          'assistant'
+          'assistant',
+          true
         );
-
       }
 
       return;
     }
 
-    /*
-     * Local task
-     */
+    /* Task */
     if (
       /^add task\s+/i.test(text)
     ) {
-
       const taskText =
         text
           .replace(
@@ -837,27 +867,26 @@ composer?.addEventListener(
 
       addMessage(
         text,
-        'user'
+        'user',
+        true
       );
 
       userInput.value = '';
 
       if (taskText) {
-
         addTask(taskText);
 
         addMessage(
           `✅ Task added: ${taskText}`,
-          'assistant'
+          'assistant',
+          true
         );
       }
 
       return;
     }
 
-    /*
-     * Normal AI message
-     */
+    /* Normal AI */
     await sendToAI(text);
   }
 );
@@ -872,45 +901,35 @@ document
 
     button.addEventListener(
       'click',
-      async () => {
+      () => {
 
         const command =
           button.dataset.command ||
           '';
 
-        if (!command) return;
-
-        /*
-         * Calculator
-         */
         if (
           /^calculator\s+/i.test(
             command
           )
         ) {
-
           addMessage(
             command,
-            'user'
+            'user',
+            true
           );
 
           addMessage(
             calculate(command),
-            'assistant'
+            'assistant',
+            true
           );
 
           return;
         }
 
-        /*
-         * Note
-         */
         if (
-          /^note\s+/i.test(
-            command
-          )
+          /^note\s+/i.test(command)
         ) {
-
           const text =
             command
               .replace(
@@ -921,28 +940,26 @@ document
 
           addMessage(
             command,
-            'user'
+            'user',
+            true
           );
 
           addNote(text);
 
           addMessage(
             `📝 Note saved: ${text}`,
-            'assistant'
+            'assistant',
+            true
           );
 
           return;
         }
 
-        /*
-         * Task
-         */
         if (
           /^add task\s+/i.test(
             command
           )
         ) {
-
           const text =
             command
               .replace(
@@ -953,23 +970,22 @@ document
 
           addMessage(
             command,
-            'user'
+            'user',
+            true
           );
 
           addTask(text);
 
           addMessage(
             `✅ Task added: ${text}`,
-            'assistant'
+            'assistant',
+            true
           );
 
           return;
         }
 
-        /*
-         * Normal AI
-         */
-        await sendToAI(command);
+        sendToAI(command);
       }
     );
   });
@@ -978,27 +994,35 @@ document
    NEW CHAT
 ========================================================= */
 
-$('newChatBtn')
-  ?.addEventListener(
-    'click',
-    () => {
+$('newChatBtn')?.addEventListener(
+  'click',
+  () => {
 
-      chatHistory = [];
+    if (isThinking) return;
 
-      if (messagesEl) {
-        messagesEl.innerHTML = '';
-      }
-
-      showView('chat');
-
-      addMessage(
-        'New conversation started. 👋 Bolo Gaurav, kya karna hai?',
-        'assistant'
+    const confirmed =
+      confirm(
+        'Current conversation clear karke new chat start karni hai?'
       );
 
-      userInput?.focus();
+    if (!confirmed) return;
+
+    chatHistory = [];
+
+    saveJSON(
+      STORAGE.chat,
+      chatHistory
+    );
+
+    if (messagesEl) {
+      messagesEl.innerHTML = '';
     }
-  );
+
+    showWelcomeMessage();
+
+    userInput?.focus();
+  }
+);
 
 /* =========================================================
    NAVIGATION
@@ -1013,7 +1037,6 @@ document
     button.addEventListener(
       'click',
       () => {
-
         showView(
           button.dataset.view
         );
@@ -1022,235 +1045,559 @@ document
   });
 
 /* =========================================================
-   NOTES UI
+   NOTES FORM
 ========================================================= */
 
-$('addNoteBtn')
-  ?.addEventListener(
-    'click',
-    () => {
+$('addNoteBtn')?.addEventListener(
+  'click',
+  () => {
 
-      const form =
-        $('noteForm');
+    $('noteForm')?.classList.toggle(
+      'hidden'
+    );
 
-      form?.classList.toggle(
-        'hidden'
-      );
+    $('noteInput')?.focus();
+  }
+);
 
-      $('noteInput')?.focus();
-    }
-  );
+$('saveNoteBtn')?.addEventListener(
+  'click',
+  () => {
 
-$('saveNoteBtn')
-  ?.addEventListener(
-    'click',
-    () => {
+    const input =
+      $('noteInput');
 
-      const input =
-        $('noteInput');
+    const text =
+      input?.value.trim();
 
-      const text =
-        input?.value.trim();
+    if (!text) return;
 
-      if (!text) return;
+    addNote(text);
 
-      addNote(text);
+    input.value = '';
 
-      input.value = '';
-
-      $('noteForm')
-        ?.classList.add(
-          'hidden'
-        );
-    }
-  );
-
-$('noteInput')
-  ?.addEventListener(
-    'keydown',
-    (event) => {
-
-      if (
-        event.key === 'Enter'
-      ) {
-
-        event.preventDefault();
-
-        $('saveNoteBtn')?.click();
-      }
-    }
-  );
+    $('noteForm')?.classList.add(
+      'hidden'
+    );
+  }
+);
 
 /* =========================================================
-   TASK UI
+   TASK FORM
 ========================================================= */
 
-$('addTaskBtn')
-  ?.addEventListener(
-    'click',
-    () => {
+$('addTaskBtn')?.addEventListener(
+  'click',
+  () => {
 
-      const form =
-        $('taskForm');
+    $('taskForm')?.classList.toggle(
+      'hidden'
+    );
 
-      form?.classList.toggle(
-        'hidden'
-      );
+    $('taskInput')?.focus();
+  }
+);
 
-      $('taskInput')?.focus();
-    }
-  );
+$('saveTaskBtn')?.addEventListener(
+  'click',
+  () => {
 
-$('saveTaskBtn')
-  ?.addEventListener(
-    'click',
-    () => {
+    const input =
+      $('taskInput');
 
-      const input =
-        $('taskInput');
+    const text =
+      input?.value.trim();
 
-      const text =
-        input?.value.trim();
+    if (!text) return;
 
-      if (!text) return;
+    addTask(text);
 
-      addTask(text);
+    input.value = '';
 
-      input.value = '';
-
-      $('taskForm')
-        ?.classList.add(
-          'hidden'
-        );
-    }
-  );
-
-$('taskInput')
-  ?.addEventListener(
-    'keydown',
-    (event) => {
-
-      if (
-        event.key === 'Enter'
-      ) {
-
-        event.preventDefault();
-
-        $('saveTaskBtn')?.click();
-      }
-    }
-  );
+    $('taskForm')?.classList.add(
+      'hidden'
+    );
+  }
+);
 
 /* =========================================================
    NOTE DELETE
 ========================================================= */
 
-$('notesList')
-  ?.addEventListener(
-    'click',
-    (event) => {
+$('notesList')?.addEventListener(
+  'click',
+  (event) => {
 
-      const button =
-        event.target.closest(
-          '[data-delete-note]'
-        );
-
-      if (!button) return;
-
-      const id =
-        Number(
-          button.dataset.deleteNote
-        );
-
-      notes =
-        notes.filter(
-          (note) =>
-            note.id !== id
-        );
-
-      saveJSON(
-        STORAGE.notes,
-        notes
+    const button =
+      event.target.closest(
+        '[data-delete-note]'
       );
 
-      renderNotes();
-      updateCounts();
+    if (!button) return;
 
-      showToast(
-        'Note deleted 🗑️'
+    const id =
+      Number(
+        button.dataset.deleteNote
       );
-    }
-  );
+
+    notes =
+      notes.filter(
+        (note) =>
+          note.id !== id
+      );
+
+    saveJSON(
+      STORAGE.notes,
+      notes
+    );
+
+    renderNotes();
+    updateCounts();
+  }
+);
 
 /* =========================================================
    TASK ACTIONS
 ========================================================= */
 
-$('tasksList')
-  ?.addEventListener(
+$('tasksList')?.addEventListener(
+  'click',
+  (event) => {
+
+    const deleteButton =
+      event.target.closest(
+        '[data-delete-task]'
+      );
+
+    const toggleButton =
+      event.target.closest(
+        '[data-toggle-task]'
+      );
+
+    if (deleteButton) {
+
+      const id =
+        Number(
+          deleteButton.dataset
+            .deleteTask
+        );
+
+      tasks =
+        tasks.filter(
+          (task) =>
+            task.id !== id
+        );
+
+      saveJSON(
+        STORAGE.tasks,
+        tasks
+      );
+
+      renderTasks();
+      updateCounts();
+    }
+
+    if (toggleButton) {
+
+      const id =
+        Number(
+          toggleButton.dataset
+            .toggleTask
+        );
+
+      const task =
+        tasks.find(
+          (item) =>
+            item.id === id
+        );
+
+      if (task) {
+        task.done =
+          !task.done;
+      }
+
+      saveJSON(
+        STORAGE.tasks,
+        tasks
+      );
+
+      renderTasks();
+      updateCounts();
+    }
+  }
+);
+
+/* =========================================================
+   CLEAR LOCAL DATA
+========================================================= */
+
+$('clearDataBtn')?.addEventListener(
+  'click',
+  () => {
+
+    const confirmed =
+      confirm(
+        'Notes, tasks aur chat history permanently clear karni hai?'
+      );
+
+    if (!confirmed) return;
+
+    notes = [];
+    tasks = [];
+    chatHistory = [];
+
+    localStorage.removeItem(
+      STORAGE.notes
+    );
+
+    localStorage.removeItem(
+      STORAGE.tasks
+    );
+
+    localStorage.removeItem(
+      STORAGE.chat
+    );
+
+    if (messagesEl) {
+      messagesEl.innerHTML = '';
+    }
+
+    renderNotes();
+    renderTasks();
+    updateCounts();
+
+    showWelcomeMessage();
+  }
+);
+
+/* =========================================================
+   THEME
+========================================================= */
+
+function applyTheme() {
+  const theme =
+    localStorage.getItem(
+      STORAGE.theme
+    );
+
+  if (theme === 'light') {
+    document.body.classList.add(
+      'light'
+    );
+  } else {
+    document.body.classList.remove(
+      'light'
+    );
+  }
+}
+
+$('themeBtn')?.addEventListener(
+  'click',
+  () => {
+
+    const isLight =
+      document.body.classList.toggle(
+        'light'
+      );
+
+    localStorage.setItem(
+      STORAGE.theme,
+      isLight
+        ? 'light'
+        : 'dark'
+    );
+  }
+);
+
+/* =========================================================
+   MOBILE MENU
+========================================================= */
+
+$('mobileMenu')?.addEventListener(
+  'click',
+  () => {
+
+    $('sidebar')?.classList.toggle(
+      'open'
+    );
+  }
+);
+
+/* =========================================================
+   VOICE INPUT
+========================================================= */
+
+$('voiceBtn')?.addEventListener(
+  'click',
+  () => {
+
+    const SpeechRecognition =
+      window.SpeechRecognition ||
+      window.webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      alert(
+        'Voice input is not supported in this browser.'
+      );
+
+      return;
+    }
+
+    const recognition =
+      new SpeechRecognition();
+
+    recognition.lang =
+      'hi-IN';
+
+    recognition.interimResults =
+      false;
+
+    recognition.maxAlternatives =
+      1;
+
+    setStatus(
+      'LISTENING...'
+    );
+
+    aiOrb?.classList.add(
+      'ai-active'
+    );
+
+    recognition.onresult =
+      (event) => {
+
+        const transcript =
+          event
+            .results[0][0]
+            .transcript;
+
+        userInput.value =
+          transcript;
+
+        userInput.focus();
+      };
+
+    recognition.onerror =
+      (event) => {
+
+        console.error(
+          'Voice error:',
+          event.error
+        );
+
+        setStatus(
+          'AI ONLINE'
+        );
+
+        aiOrb?.classList.remove(
+          'ai-active'
+        );
+      };
+
+    recognition.onend =
+      () => {
+
+        setStatus(
+          'AI ONLINE'
+        );
+
+        aiOrb?.classList.remove(
+          'ai-active'
+        );
+      };
+
+    recognition.start();
+  }
+);
+
+/* =========================================================
+   CALCULATOR UI
+========================================================= */
+
+const calcDisplay =
+  $('calcDisplay');
+
+const calcGrid =
+  $('calcGrid');
+
+if (calcGrid && calcDisplay) {
+
+  calcGrid.addEventListener(
     'click',
     (event) => {
 
-      const deleteButton =
+      const button =
         event.target.closest(
-          '[data-delete-task]'
+          'button'
         );
 
-      const toggleButton =
-        event.target.closest(
-          '[data-toggle-task]'
-        );
+      if (!button) return;
 
-      /*
-       * Delete task
-       */
-      if (deleteButton) {
+      const value =
+        button.dataset.value;
 
-        const id =
-          Number(
-            deleteButton.dataset
-              .deleteTask
-          );
+      if (!value) return;
 
-        tasks =
-          tasks.filter(
-            (task) =>
-              task.id !== id
-          );
-
-        saveJSON(
-          STORAGE.tasks,
-          tasks
-        );
-
-        renderTasks();
-        updateCounts();
-
-        showToast(
-          'Task deleted 🗑️'
-        );
+      if (value === 'C') {
+        calcDisplay.value = '';
+        return;
       }
 
-      /*
-       * Toggle task
-       */
-      if (toggleButton) {
-
-        const id =
-          Number(
-            toggleButton.dataset
-              .toggleTask
+      if (value === '⌫') {
+        calcDisplay.value =
+          calcDisplay.value.slice(
+            0,
+            -1
           );
 
-        const task =
-          tasks.find(
-            (item) =>
-              item.id === id
-          );
+        return;
+      }
 
-        if (task) {
+      if (value === '=') {
 
-          task.done =
-            !task.done;
+        try {
 
-        
+          const expression =
+            calcDisplay.value
+              .replace(
+                /×/g,
+                '*'
+              )
+              .replace(
+                /÷/g,
+                '/'
+              );
+
+          const result =
+            Function(
+              `"use strict"; return (${expression})`
+            )();
+
+          calcDisplay.value =
+            Number.isFinite(result)
+              ? result
+              : '';
+
+        } catch {
+
+          calcDisplay.value =
+            'Error';
+        }
+
+        return;
+      }
+
+      if (value === '%') {
+
+        try {
+
+          const current =
+            parseFloat(
+              calcDisplay.value
+            );
+
+          if (
+            Number.isFinite(
+              current
+            )
+          ) {
+            calcDisplay.value =
+              current / 100;
+          }
+
+        } catch {}
+
+        return;
+      }
+
+      calcDisplay.value +=
+        value;
+    }
+  );
+}
+
+/* =========================================================
+   CLOCK
+========================================================= */
+
+function updateClock() {
+
+  const clock =
+    $('clock');
+
+  if (!clock) return;
+
+  const now =
+    new Date();
+
+  clock.textContent =
+    now.toLocaleTimeString(
+      [],
+      {
+        hour:
+          '2-digit',
+
+        minute:
+          '2-digit'
+      }
+    );
+}
+
+setInterval(
+  updateClock,
+  1000
+);
+
+/* =========================================================
+   KEYBOARD SHORTCUTS
+========================================================= */
+
+document.addEventListener(
+  'keydown',
+  (event) => {
+
+    if (
+      event.key === '/' &&
+      document.activeElement !==
+        userInput
+    ) {
+
+      event.preventDefault();
+
+      userInput?.focus();
+    }
+
+    if (
+      event.key === 'Escape'
+    ) {
+
+      $('sidebar')?.classList.remove(
+        'open'
+      );
+    }
+  }
+);
+
+/* =========================================================
+   INITIALIZE
+========================================================= */
+
+applyTheme();
+
+updateClock();
+
+renderNotes();
+
+renderTasks();
+
+updateCounts();
+
+restoreChat();
+
+checkBackend();
+
+userInput?.focus();
+
+console.log(
+  '🚀 GAURAV AI initialized successfully.'
+);
