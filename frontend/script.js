@@ -315,12 +315,16 @@ async function sendToAI(text) {
   const cleanText =
     String(text || '').trim();
 
-  if (!cleanText || isThinking) {
+  if (
+    (!cleanText && !selectedImageFile) ||
+    isThinking
+  ) {
     return;
   }
 
   addMessage(
-    cleanText,
+    cleanText ||
+      '📷 Image sent',
     'user',
     true
   );
@@ -333,6 +337,15 @@ async function sendToAI(text) {
     addThinkingMessage();
 
   try {
+    let image = null;
+
+    if (selectedImageFile) {
+      image =
+        await fileToDataURL(
+          selectedImageFile
+        );
+    }
+
     const response =
       await fetch(
         '/api/chat',
@@ -346,7 +359,9 @@ async function sendToAI(text) {
 
           body: JSON.stringify({
             messages:
-              chatHistory.slice(-12)
+              chatHistory.slice(-12),
+
+            image
           })
         }
       );
@@ -1601,3 +1616,85 @@ userInput?.focus();
 console.log(
   '🚀 GAURAV AI initialized successfully.'
 );
+/* =========================================================
+   PHOTO ATTACHMENT — PREVIEW ONLY
+========================================================= */
+
+let selectedImageFile = null;
+
+const imageInput = $('imageInput');
+const imageBtn = $('imageBtn');
+const imagePreview = $('imagePreview');
+const previewImage = $('previewImage');
+const removeImageBtn = $('removeImageBtn');
+
+imageBtn?.addEventListener('click', () => {
+  imageInput?.click();
+});
+
+imageInput?.addEventListener('change', () => {
+  const file = imageInput.files?.[0];
+
+  if (!file) {
+    return;
+  }
+
+  if (!file.type.startsWith('image/')) {
+    alert('Please select an image file.');
+    imageInput.value = '';
+    return;
+  }
+
+  selectedImageFile = file;
+
+  const reader = new FileReader();
+
+  reader.onload = (event) => {
+    if (previewImage) {
+      previewImage.src = event.target.result;
+    }
+
+    imagePreview?.classList.remove('hidden');
+  };
+
+  reader.readAsDataURL(file);
+});
+
+removeImageBtn?.addEventListener('click', () => {
+  selectedImageFile = null;
+
+  if (imageInput) {
+    imageInput.value = '';
+  }
+
+  if (previewImage) {
+    previewImage.removeAttribute('src');
+  }
+
+  imagePreview?.classList.add('hidden');
+});
+
+/* =========================================================
+   IMAGE DATA HELPER
+========================================================= */
+
+function fileToDataURL(file) {
+  return new Promise((resolve, reject) => {
+    if (!file) {
+      resolve(null);
+      return;
+    }
+
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      resolve(String(reader.result));
+    };
+
+    reader.onerror = () => {
+      reject(new Error('Image read failed.'));
+    };
+
+    reader.readAsDataURL(file);
+  });
+}

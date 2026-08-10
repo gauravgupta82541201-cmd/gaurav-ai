@@ -22,7 +22,7 @@ const openRouterKey = process.env.OPENROUTER_API_KEY || '';
 const OPENROUTER_MODEL =
   process.env.OPENROUTER_MODEL || 'openrouter/free';
 
-app.use(express.json({ limit: '64kb' }));
+app.use(express.json({ limit: '10mb' }));
 
 app.use(
   express.static(
@@ -78,6 +78,62 @@ function cleanMessages(messages) {
     }));
 }
 
+
+
+// =====================================
+// IMAGE VALIDATION
+// =====================================
+
+function cleanImage(image) {
+  if (typeof image !== 'string') {
+    return null;
+  }
+
+  if (!image.startsWith('data:image/')) {
+    return null;
+  }
+
+  const commaIndex = image.indexOf(',');
+
+  if (commaIndex === -1) {
+    return null;
+  }
+
+  const header = image.slice(0, commaIndex);
+  const data = image.slice(commaIndex + 1);
+
+  if (!header.includes(';base64')) {
+    return null;
+  }
+
+  const allowedTypes = [
+    'data:image/png;base64',
+    'data:image/jpeg;base64',
+    'data:image/jpg;base64',
+    'data:image/webp;base64'
+  ];
+
+  if (!allowedTypes.includes(header)) {
+    return null;
+  }
+
+  if (!data) {
+    return null;
+  }
+
+  if (data.length > 10 * 1024 * 1024) {
+    throw new Error('IMAGE_TOO_LARGE');
+  }
+
+  return {
+    mimeType: header
+      .replace('data:', '')
+      .replace(';base64', '')
+      .replace('image/jpg', 'image/jpeg'),
+
+    data
+  };
+}
 
 // =====================================
 // SYSTEM PROMPT
@@ -154,7 +210,7 @@ IMPORTANT RULES:
 // GEMINI CHAT
 // =====================================
 
-async function askGemini(safeMessages) {
+async function askGemini(safeMessages, image = null) {
   if (!geminiClient) {
     throw new Error('GEMINI_NOT_CONFIGURED');
   }
@@ -170,6 +226,22 @@ async function askGemini(safeMessages) {
       }
     ]
   }));
+
+  if (image) {
+    const lastUserMessage = contents
+      .slice()
+      .reverse()
+      .find((item) => item.role === 'user');
+
+    if (lastUserMessage) {
+      lastUserMessage.parts.push({
+        inlineData: {
+          mimeType: image.mimeType,
+          data: image.data
+        }
+      });
+    }
+  }
 
   const response =
     await geminiClient.models.generateContent({
@@ -300,6 +372,24 @@ app.post('/api/chat', async (req, res) => {
       req.body?.messages
     );
 
+  let image = null;
+
+  try {
+    image = cleanImage(
+      req.body?.image
+    );
+  } catch (error) {
+    if (error?.message === 'IMAGE_TOO_LARGE') {
+      return res.status(413).json({
+        error: 'Image bahut badi hai. Please smaller image select karo.'
+      });
+    }
+
+    return res.status(400).json({
+      error: 'Invalid image.'
+    });
+  }
+
   if (
     !safeMessages.length ||
     safeMessages.at(-1).role !== 'user'
@@ -321,7 +411,8 @@ app.post('/api/chat', async (req, res) => {
 
       const reply =
         await askGemini(
-          safeMessages
+          safeMessages,
+          image
         );
 
       console.log(
